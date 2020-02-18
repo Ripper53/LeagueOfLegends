@@ -1,9 +1,9 @@
 class ChampionInfo {
-    constructor(champion, title, description) {
-        this.score = 1;
+    constructor(champion, title, description, score) {
         this.champion = champion;
         this.title = title;
         this.description = description;
+        this.score = score;
     }
 }
 class Champion {
@@ -36,11 +36,11 @@ class Champion {
             oppositeInfos.push(oppositeInfo);
         }
     }
-    addGoodAgainst(champion, description) {
-        this.addChampionInfo(this.goodAgainst, champion.badAgainst, champion, description, new ChampionInfo(champion, "Good against " + champion.name, description), new ChampionInfo(this, "Bad against " + this.name, description));
+    addGoodAgainst(champion, description, score = 1) {
+        this.addChampionInfo(this.goodAgainst, champion.badAgainst, champion, description, new ChampionInfo(champion, "Good against " + champion.name, description, score), new ChampionInfo(this, "Bad against " + this.name, description, score));
     }
-    addGoodWith(champion, description) {
-        this.addChampionInfo(this.goodWith, champion.goodWith, champion, description, new ChampionInfo(champion, "Good with " + champion.name, description), new ChampionInfo(this, "Good with " + this.name, description));
+    addGoodWith(champion, description, score = 1) {
+        this.addChampionInfo(this.goodWith, champion.goodWith, champion, description, new ChampionInfo(champion, "Good with " + champion.name, description, score), new ChampionInfo(this, "Good with " + this.name, description, score));
     }
 }
 Champion.ALL = [];
@@ -74,6 +74,12 @@ class UIElementEvents extends UIEvents {
     }
     removeOnPointerLeave(func) {
         this.element.removeEventListener('pointerleave', func);
+    }
+    addOnPointerDown(func) {
+        this.element.addEventListener('pointerdown', func);
+    }
+    removeOnPointerDown(func) {
+        this.element.removeEventListener('pointerdown', func);
     }
     addOnChange(func) {
         this.element.addEventListener('change', func);
@@ -272,6 +278,7 @@ class PopUpInfo extends UIElement {
         this.descriptionText.modifyStyle.maxWidth = "400px";
         this.descriptionText.modifyStyle.maxHeight = "400px";
         this.descriptionText.modifyStyle.overflowY = "auto";
+        this.descriptionText.modifyStyle.wordWrap = "break-word";
     }
     display(ui) {
         clearChildren(this.descriptionText.modifyElement);
@@ -320,6 +327,8 @@ class ChampionUI extends UIElement {
     constructor(src, w, h) {
         super(document.createElement('div'));
         this.champion = null;
+        this.synergyScore = null;
+        this.counterScore = null;
         this.modifyStyle.position = "relative";
         const width = w + "px", height = h + "px";
         this.src = src;
@@ -327,18 +336,19 @@ class ChampionUI extends UIElement {
         this.modifyElement.appendChild(this.imageButton.modifyElement);
         this.imageButton.modifyElement.src = getImagePath(this.src);
         this.imageButton.modifyStyle.cursor = "pointer";
-        this.imageButton.modifyElement.oncontextmenu = e => {
+        this.imageButton.modifyEvents.addOnPointerDown(e => {
+            if (e.button !== 2)
+                return;
             ChampionUI.popUp.display(this);
             let x = e.clientX, y = e.clientY;
             const w = ChampionUI.popUp.modifyElement.clientWidth, h = ChampionUI.popUp.modifyElement.clientHeight;
             if ((x + w) > window.innerWidth)
-                x -= w;
+                x += window.innerWidth - (x + w);
             if ((y + h) > window.innerHeight)
-                y -= h;
+                y += window.innerHeight - (y + h);
             ChampionUI.popUp.modifyStyle.left = x + "px";
             ChampionUI.popUp.modifyStyle.top = y + "px";
-            return false;
-        };
+        });
         this.text = getTextUI();
         this.modifyElement.appendChild(this.text.modifyElement);
         const fontSize = 12;
@@ -349,8 +359,8 @@ class ChampionUI extends UIElement {
         this.text.modifyStyle.display = "block";
         this.text.modifyStyle.width = width;
         this.text.modifyStyle.pointerEvents = "none";
-        const getHighlightedTextUI = () => {
-            const text = getTextUI("", 4, "#ffffff");
+        const getHighlightedTextUI = (color = "#ffffff") => {
+            const text = getTextUI("", 4, color);
             this.modifyElement.appendChild(text.modifyElement);
             text.modifyStyle.zIndex = "10";
             text.modifyStyle.fontSize = "18px";
@@ -361,12 +371,12 @@ class ChampionUI extends UIElement {
             text.modifyStyle.pointerEvents = "none";
             return text;
         };
-        this.highlightedText = getHighlightedTextUI();
+        this.highlightedText = getHighlightedTextUI("#000000");
         this.highlightedText.modifyStyle.color = "yellow";
-        this.synergyText = getHighlightedTextUI();
+        this.synergyText = getHighlightedTextUI("#ffffff");
         this.synergyText.modifyStyle.textAlign = "left";
         this.synergyText.modifyStyle.color = "blue";
-        this.counterText = getHighlightedTextUI();
+        this.counterText = getHighlightedTextUI("#000000");
         this.counterText.modifyStyle.textAlign = "right";
         this.counterText.modifyStyle.color = "red";
         this.hoverImage = new ImageUI();
@@ -415,8 +425,18 @@ class ChampionUI extends UIElement {
     ban() {
         this.imageButton.modifyStyle.filter = "grayscale(100%)";
     }
+    getSynergyScore() {
+        if (this.synergyScore === null)
+            return 0;
+        return this.synergyScore.score;
+    }
+    getCounterScore() {
+        if (this.counterScore === null)
+            return 0;
+        return this.counterScore.score;
+    }
     evaluateChamps(team, infos) {
-        const champs = new ChampionScore();
+        const champScore = new ChampionScore();
         for (let ui of team) {
             const champ = ui.champion;
             if (champ === null)
@@ -424,11 +444,11 @@ class ChampionUI extends UIElement {
             const compareFunc = (v) => v.champion === champ;
             const info = infos.find(compareFunc);
             if (info !== undefined) {
-                champs.champions.push(champ);
-                champs.score += info.score;
+                champScore.champions.push(champ);
+                champScore.score += info.score;
             }
         }
-        return champs;
+        return champScore;
     }
     evaluatePick(friendlyTeam, enemyTeam) {
         if (this.champion === null) {
@@ -436,10 +456,10 @@ class ChampionUI extends UIElement {
             this.counterText.modifyElement.textContent = "";
             return;
         }
-        const synergyChamps = this.evaluateChamps(friendlyTeam, this.champion.goodWith);
-        this.synergyText.modifyElement.textContent = synergyChamps.score.toString();
-        const counterChamps = this.evaluateChamps(enemyTeam, this.champion.goodAgainst);
-        this.counterText.modifyElement.textContent = counterChamps.score.toString();
+        this.synergyScore = this.evaluateChamps(friendlyTeam, this.champion.goodWith);
+        this.synergyText.modifyElement.textContent = this.synergyScore.score.toString();
+        this.counterScore = this.evaluateChamps(enemyTeam, this.champion.goodAgainst);
+        this.counterText.modifyElement.textContent = this.counterScore.score.toString();
     }
     evaluateBan(friendlyTeam, enemyTeam) {
         if (this.champion === null) {
@@ -447,10 +467,10 @@ class ChampionUI extends UIElement {
             this.counterText.modifyElement.textContent = "";
             return;
         }
-        const synergyChamps = this.evaluateChamps(friendlyTeam, this.champion.badWith);
-        this.synergyText.modifyElement.textContent = (-synergyChamps.score).toString();
-        const counteredByChamps = this.evaluateChamps(enemyTeam, this.champion.badAgainst);
-        this.counterText.modifyElement.textContent = (-counteredByChamps.score).toString();
+        this.synergyScore = this.evaluateChamps(friendlyTeam, this.champion.goodWith);
+        this.synergyText.modifyElement.textContent = (-this.synergyScore.score).toString();
+        this.counterScore = this.evaluateChamps(enemyTeam, this.champion.goodAgainst);
+        this.counterText.modifyElement.textContent = (-this.counterScore.score).toString();
     }
 }
 ChampionUI.popUp = new PopUpInfo();
@@ -520,15 +540,19 @@ class SideLayoutUI extends VerticalLayoutUI {
         for (let img of this.picks)
             this.add(img);
     }
-    evaluatePicks() {
+    evaluate(func) {
         for (let ui of this.picks) {
-            ui.evaluatePick(this.picks, this.enemySide.picks);
+            func(ui);
+        }
+        for (let ui of championUIs) {
+            func(ui);
         }
     }
+    evaluatePicks() {
+        this.evaluate(ui => ui.evaluatePick(this.picks, this.enemySide.picks));
+    }
     evaluateBans() {
-        for (let ui of this.bans) {
-            ui.evaluateBan(this.bans, this.enemySide.bans);
-        }
+        this.evaluate(ui => ui.evaluateBan(this.bans, this.enemySide.bans));
     }
     getBanImage() {
         const ui = getChampionUI(this.banSrc, 50, 50);
@@ -537,7 +561,7 @@ class SideLayoutUI extends VerticalLayoutUI {
         ui.synergyText.modifyStyle.top = "25%";
         ui.counterText.modifyStyle.top = "25%";
         SideLayoutUI.pickableUI(ui);
-        ui.imageButton.modifyEvents.addOnClick(() => this.evaluateBans());
+        ui.imageButton.modifyEvents.addOnClick(() => evaluateBans(this, this.enemySide));
         return ui;
     }
     getSideImage() {
@@ -553,7 +577,7 @@ class SideLayoutUI extends VerticalLayoutUI {
         ui.hoverImage.modifyStyle.transform = "rotate(0deg)";
         ui.hoverImage.modifyStyle.borderRadius = "37.5px 0px 0px 37.5px";
         SideLayoutUI.pickableUI(ui);
-        ui.imageButton.modifyEvents.addOnClick(() => this.evaluatePicks());
+        ui.imageButton.modifyEvents.addOnClick(() => evaluatePicks(this, this.enemySide));
         return ui;
     }
     static pickableUI(ui) {
@@ -564,6 +588,24 @@ class SideLayoutUI extends VerticalLayoutUI {
             pick.set(ui);
         });
     }
+}
+const championUIs = [];
+let sort = null;
+function evaluatePicks(friendlyTeam, enemyTeam) {
+    friendlyTeam.evaluatePicks();
+    enemyTeam.evaluateBans();
+    for (let ui of championUIs)
+        ui.evaluatePick(friendlyTeam.picks, enemyTeam.picks);
+    if (sort !== null)
+        sort();
+}
+function evaluateBans(friendlyTeam, enemyTeam) {
+    friendlyTeam.evaluateBans();
+    enemyTeam.evaluateBans();
+    for (let ui of championUIs)
+        ui.evaluateBan(friendlyTeam.bans, enemyTeam.bans);
+    if (sort !== null)
+        sort();
 }
 const sideWidth = 200;
 const blueSide = new SideLayoutUI("BanBanner.png", "BlueBanner.png");
@@ -618,6 +660,8 @@ const pick = new (class Pick {
         for (let champ of redSide.picks) {
             champ.evaluatePick(redSide.picks, blueSide.picks);
         }
+        if (sort !== null)
+            sort();
         if (this.setChampionEvent !== null)
             this.setChampionEvent(ui);
     }
@@ -670,6 +714,7 @@ headerText.modifyStyle.cursor = "default";
 (() => {
     UI.body.style.overflowY = "auto";
     UI.body.style.minWidth = "884px";
+    UI.body.oncontextmenu = () => false;
     UI.setBackgroundColor("black");
     const bg = document.createElement('video');
     UI.body.appendChild(bg);
@@ -695,6 +740,18 @@ headerText.modifyStyle.cursor = "default";
     champSelectDiv.appendChild(searchInputField.modifyElement);
     searchInputField.modifyStyle.display = "inline-block";
     searchInputField.modifyStyle.opacity = "50%";
+    const sortDropdown = document.createElement('select');
+    champSelectDiv.appendChild(sortDropdown);
+    sortDropdown.style.opacity = "50%";
+    const nameSortOp = document.createElement('option');
+    sortDropdown.appendChild(nameSortOp);
+    nameSortOp.textContent = "Name";
+    const synergySortOp = document.createElement('option');
+    sortDropdown.appendChild(synergySortOp);
+    synergySortOp.textContent = "Synergy";
+    const counterSortOp = document.createElement('option');
+    sortDropdown.appendChild(counterSortOp);
+    counterSortOp.textContent = "Counter";
     const numbersCheckDiv = document.createElement('div');
     champSelectDiv.appendChild(numbersCheckDiv);
     numbersCheckDiv.style.position = "relative";
@@ -753,6 +810,8 @@ headerText.modifyStyle.cursor = "default";
         "Draven",
         "Ekko",
         "Elise",
+        "Evelynn",
+        "Ezreal",
         "Fiddlesticks",
         "Fiora",
         "Fizz",
@@ -760,6 +819,7 @@ headerText.modifyStyle.cursor = "default";
         "Gangplank",
         "Garen",
         "Gnar",
+        "Gragas",
         "Graves",
         "Hecarim",
         "Heimerdinger",
@@ -840,6 +900,7 @@ headerText.modifyStyle.cursor = "default";
         "Tahm Kench",
         "Taliyah",
         "Talon",
+        "Taric",
         "Teemo",
         "Thresh",
         "Tristana",
@@ -865,12 +926,13 @@ headerText.modifyStyle.cursor = "default";
         "Yasuo",
         "Yorick",
         "Yuumi",
+        "Zac",
         "Zed",
         "Ziggs",
         "Zilean",
+        "Zoe",
         "Zyra"
     ];
-    const championUIs = [];
     for (let name of championNames) {
         const src = name + "Icon.png";
         const ui = getChampionUI(src, 75, 75);
@@ -888,6 +950,58 @@ headerText.modifyStyle.cursor = "default";
             else
                 ui.modifyStyle.display = "none";
         }
+    });
+    sortDropdown.addEventListener('change', e => {
+        switch (sortDropdown.selectedIndex) {
+            case 0:
+                sort = () => {
+                    sort = null;
+                    championUIs.sort((a, b) => {
+                        const nameA = a.get().name.toLowerCase(), nameB = b.get().name.toLowerCase();
+                        if (nameA > nameB)
+                            return 1;
+                        else if (nameA < nameB)
+                            return -1;
+                        else
+                            return 0;
+                    });
+                };
+                break;
+            case 1:
+                sort = () => {
+                    championUIs.sort((a, b) => {
+                        const synergyA = a.getSynergyScore(), synergyB = b.getSynergyScore();
+                        if (synergyA > synergyB)
+                            return -1;
+                        else if (synergyA < synergyB)
+                            return 1;
+                        else
+                            return 0;
+                    });
+                };
+                break;
+            default:
+                sort = () => {
+                    championUIs.sort((a, b) => {
+                        const counterA = a.getCounterScore(), counterB = b.getCounterScore();
+                        if (counterA > counterB)
+                            return -1;
+                        else if (counterA < counterB)
+                            return 1;
+                        else
+                            return 0;
+                    });
+                };
+                break;
+        }
+        const sortChampUIArray = sort;
+        sort = () => {
+            sortChampUIArray();
+            clearChildren(grid.modifyElement);
+            for (let champ of championUIs)
+                grid.modifyElement.appendChild(champ.modifyElement);
+        };
+        sort();
     });
     numbersCheckInputField.modifyElement.checked = true;
     numbersCheckInputField.modifyEvents.addOnChange(() => {
@@ -963,6 +1077,7 @@ headerText.modifyStyle.cursor = "default";
                     pick.setChampionEvent = data.action;
                     headerText.modifyElement.textContent = data.title;
                     pick.set(data.ui);
+                    evaluatePicks(data.friendlyTeam, data.enemyTeam);
                 }
                 else {
                     pick.setChampionEvent = () => {
@@ -971,33 +1086,25 @@ headerText.modifyStyle.cursor = "default";
                     };
                 }
             }
-            function evaluateBan(friendlyTeam, enemyTeam) {
-                for (let ui of championUIs)
-                    ui.evaluateBan(friendlyTeam.picks, enemyTeam.picks);
-            }
             function addBanSrcEvent(title, ui, friendlyTeam, enemyTeam) {
                 srcData.data.push({
                     action: selectedUI => {
                         selectedUI.ban();
                         nextSrcEvent();
-                        evaluateBan(friendlyTeam, enemyTeam);
                     },
                     title,
-                    ui
+                    ui,
+                    friendlyTeam,
+                    enemyTeam
                 });
-            }
-            function evaluatePick(friendlyTeam, enemyTeam) {
-                for (let ui of championUIs)
-                    ui.evaluatePick(friendlyTeam.picks, enemyTeam.picks);
             }
             function addPickSrcEvent(title, ui, friendlyTeam, enemyTeam) {
                 srcData.data.push({
-                    action: () => {
-                        nextSrcEvent();
-                        evaluatePick(friendlyTeam, enemyTeam);
-                    },
+                    action: () => nextSrcEvent(),
                     title,
-                    ui
+                    ui,
+                    friendlyTeam,
+                    enemyTeam
                 });
             }
             addBanSrcEvent("Blue Ban", blueSide.bans[0], blueSide, redSide);
@@ -1020,83 +1127,845 @@ headerText.modifyStyle.cursor = "default";
             addPickSrcEvent("Blue Pick", blueSide.picks[3], blueSide, redSide);
             addPickSrcEvent("Blue Pick", blueSide.picks[4], blueSide, redSide);
             addPickSrcEvent("Red Pick", redSide.picks[4], redSide, blueSide);
-            pick.setEvent = null;
-            pick.set(null);
-            pick.setEvent = () => {
-                pick.setEvent = null;
-                nextSrcEvent();
-                evaluatePick(blueSide, redSide);
-            };
-            pick.set(blueSide.bans[0]);
+            nextSrcEvent();
         });
     })();
 })();
 (() => {
-    const aatrox = Champion.get("Aatrox"), ahri = Champion.get("Ahri"), akali = Champion.get("Akali"), alistar = Champion.get("Alistar"), amumu = Champion.get("Amumu"), anivia = Champion.get("Anivia"), annie = Champion.get("Annie"), aphelios = Champion.get("Aphelios"), ashe = Champion.get("Ashe"), aurelionSol = Champion.get("Aurelion Sol"), azir = Champion.get("Azir"), bard = Champion.get("Bard"), blitzcrank = Champion.get("Blitzcrank"), brand = Champion.get("Brand"), braum = Champion.get("Braum"), caitlyn = Champion.get("Caitlyn"), camille = Champion.get("Camille"), cassiopeia = Champion.get("Cassiopeia"), choGath = Champion.get("Cho'Gath"), corki = Champion.get("Corki"), darius = Champion.get("Darius"), diana = Champion.get("Diana"), drMundo = Champion.get("Dr. Mundo"), draven = Champion.get("Draven"), ekko = Champion.get("Ekko"), elise = Champion.get("Elise"), evelynn = Champion.get("Evelynn"), ezreal = Champion.get("Ezreal"), fiddlesticks = Champion.get("Fiddlesticks"), fiora = Champion.get("Fiora"), fizz = Champion.get("Fizz"), galio = Champion.get("Galio"), gangplank = Champion.get("Gangplank"), garen = Champion.get("Garen"), gnar = Champion.get("Gnar"), gragas = Champion.get("Gragas"), graves = Champion.get("Graves"), hecarim = Champion.get("Hecarim"), heimerdinger = Champion.get("Heimerdinger"), illaoi = Champion.get("Illaoi"), irelia = Champion.get("Irelia"), invern = Champion.get("Ivern"), janna = Champion.get("Janna"), jarvanIV = Champion.get("Jarvan IV"), jax = Champion.get("Jax"), jayce = Champion.get("Jayce"), jhin = Champion.get("Jhin"), jinx = Champion.get("Jinx"), kaiSa = Champion.get("Kai'Sa"), kalista = Champion.get("Kalista"), karma = Champion.get("Karma"), karthus = Champion.get("Karthus"), kassadin = Champion.get("Kassadin"), katarina = Champion.get("Katarina"), kayle = Champion.get("Kayle"), kayn = Champion.get("Kayn"), kennen = Champion.get("Kennen"), khaZix = Champion.get("Kha'Zix"), kindred = Champion.get("Kindred"), kled = Champion.get("Kled"), kogMaw = Champion.get("Kog'Maw"), leBlanc = Champion.get("LeBlanc"), leeSin = Champion.get("Lee Sin"), leona = Champion.get("Leona"), lissandra = Champion.get("Lissandra"), lucian = Champion.get("Lucian"), lulu = Champion.get("Lulu"), lux = Champion.get("Lux"), malphite = Champion.get("Malphite"), malzahar = Champion.get("Malzahar"), maokai = Champion.get("Maokai"), masterYi = Champion.get("Master Yi"), missFortune = Champion.get("Miss Fortune"), mordekaiser = Champion.get("Mordekaiser"), morgana = Champion.get("Morgana"), nami = Champion.get("Nami"), nasus = Champion.get("Nasus"), nautilus = Champion.get("Nautilus"), neeko = Champion.get("Neeko"), nidalee = Champion.get("Nidalee"), nocturne = Champion.get("Nocturne"), nunu = Champion.get("Nunu"), olaf = Champion.get("Olaf"), orianna = Champion.get("Orianna"), ornn = Champion.get("Ornn"), pantheon = Champion.get("Pantheon"), poppy = Champion.get("Poppy"), pyke = Champion.get("Pyke"), qiyana = Champion.get("Qiyana"), quinn = Champion.get("Quinn"), rakan = Champion.get("Rakan"), rammus = Champion.get("Rammus"), rekSai = Champion.get("Rek'Sai"), renekton = Champion.get("Renekton"), rengar = Champion.get("Rengar"), riven = Champion.get("Riven"), rumble = Champion.get("Rumble"), ryze = Champion.get("Ryze"), sejuani = Champion.get("Sejuani"), senna = Champion.get("Senna"), sett = Champion.get("Sett"), shaco = Champion.get("Shaco"), shen = Champion.get("Shen"), shyvana = Champion.get("Shyvana"), singed = Champion.get("Singed"), sion = Champion.get("Sion"), sivir = Champion.get("Sivir"), skarner = Champion.get("Skarner"), sona = Champion.get("Sona"), soraka = Champion.get("Soraka"), swain = Champion.get("Swain"), sylas = Champion.get("Sylas"), syndra = Champion.get("Syndra"), tahmKench = Champion.get("Tahm Kench"), taliyah = Champion.get("Taliyah"), talon = Champion.get("Talon"), taric = Champion.get("Taric"), teemo = Champion.get("Teemo"), thresh = Champion.get("Thresh"), tristana = Champion.get("Tristana"), trundle = Champion.get("Trundle"), tryndamere = Champion.get("Tryndamere"), twistedFate = Champion.get("Twisted Fate"), twitch = Champion.get("Twitch"), udyr = Champion.get("Udyr"), urgot = Champion.get("Urgot"), varus = Champion.get("Varus"), vayne = Champion.get("Vayne"), veigar = Champion.get("Veigar"), velKoz = Champion.get("Vel'Koz"), vi = Champion.get("Vi"), viktor = Champion.get("Viktor"), vladimir = Champion.get("Vladimir"), volibear = Champion.get("Volibear"), warwick = Champion.get("Warwick"), wukong = Champion.get("Wukong"), xayah = Champion.get("Xayah"), xerath = Champion.get("Xerath"), xinZhao = Champion.get("Xin Zhao"), yasuo = Champion.get("Yasuo"), yorick = Champion.get("Yorick"), yuumi = Champion.get("Yuumi"), zac = Champion.get("Zac"), zed = Champion.get("Zed");
-    aatrox.addGoodAgainst(gangplank, "TO DO");
-    aatrox.addGoodAgainst(darius, "TO DO");
-    aatrox.addGoodAgainst(galio, "TO DO");
-    aatrox.addGoodWith(gnar, "TO DO");
-    aatrox.addGoodWith(yasuo, "TO DO");
-    aatrox.addGoodWith(azir, "TO DO");
-    ahri.addGoodAgainst(choGath, "TO DO");
-    ahri.addGoodAgainst(azir, "TO DO");
-    ahri.addGoodAgainst(viktor, "TO DO");
-    ahri.addGoodWith(jax, "TO DO");
-    ahri.addGoodWith(riven, "TO DO");
-    ahri.addGoodWith(irelia, "TO DO");
-    akali.addGoodAgainst(nasus, "TO DO");
-    akali.addGoodAgainst(garen, "TO DO");
-    akali.addGoodAgainst(poppy, "TO DO");
-    akali.addGoodWith(diana, "TO DO");
-    akali.addGoodWith(leBlanc, "TO DO");
-    akali.addGoodWith(katarina, "TO DO");
-    amumu.addGoodAgainst(graves, "TO DO");
-    amumu.addGoodAgainst(shyvana, "TO DO");
-    amumu.addGoodAgainst(leeSin, "TO DO");
-    amumu.addGoodWith(katarina, "TO DO");
-    amumu.addGoodWith(fiddlesticks, "TO DO");
-    amumu.addGoodWith(morgana, "TO DO");
-    anivia.addGoodAgainst(kayle, "TO DO");
-    anivia.addGoodAgainst(azir, "TO DO");
-    anivia.addGoodAgainst(akali, "TO DO");
-    anivia.addGoodWith(jarvanIV, "TO DO");
-    anivia.addGoodWith(drMundo, "TO DO");
-    anivia.addGoodWith(vayne, "TO DO");
-    annie.addGoodAgainst(diana, "TO DO");
-    annie.addGoodAgainst(jayce, "TO DO");
-    annie.addGoodAgainst(viktor, "TO DO");
-    annie.addGoodWith(jinx, "TO DO");
-    annie.addGoodWith(amumu, "TO DO");
-    annie.addGoodWith(lucian, "TO DO");
-    ashe.addGoodAgainst(corki, "TO DO");
-    ashe.addGoodAgainst(lucian, "TO DO");
-    ashe.addGoodAgainst(sivir, "TO DO");
-    ashe.addGoodWith(leona, "TO DO");
-    ashe.addGoodWith(janna, "TO DO");
-    ashe.addGoodWith(thresh, "TO DO");
-    azir.addGoodAgainst(yasuo, "TO DO");
-    azir.addGoodAgainst(taliyah, "TO DO");
-    azir.addGoodAgainst(syndra, "TO DO");
-    azir.addGoodWith(aatrox, "TO DO");
-    azir.addGoodWith(yasuo, "TO DO");
-    azir.addGoodWith(alistar, "TO DO");
-    ashe.addGoodAgainst(corki, "TO DO");
-    ashe.addGoodAgainst(lucian, "TO DO");
-    ashe.addGoodAgainst(sivir, "TO DO");
-    ashe.addGoodWith(leona, "TO DO");
-    ashe.addGoodWith(janna, "TO DO");
-    ashe.addGoodWith(thresh, "TO DO");
-    ashe.addGoodAgainst(corki, "TO DO");
-    ashe.addGoodAgainst(lucian, "TO DO");
-    ashe.addGoodAgainst(sivir, "TO DO");
-    ashe.addGoodWith(leona, "TO DO");
-    ashe.addGoodWith(janna, "TO DO");
-    ashe.addGoodWith(thresh, "TO DO");
-    ashe.addGoodAgainst(corki, "TO DO");
-    ashe.addGoodAgainst(lucian, "TO DO");
-    ashe.addGoodAgainst(sivir, "TO DO");
-    ashe.addGoodWith(leona, "TO DO");
-    ashe.addGoodWith(janna, "TO DO");
-    ashe.addGoodWith(thresh, "TO DO");
+    const aatrox = Champion.get("Aatrox"), ahri = Champion.get("Ahri"), akali = Champion.get("Akali"), alistar = Champion.get("Alistar"), amumu = Champion.get("Amumu"), anivia = Champion.get("Anivia"), annie = Champion.get("Annie"), aphelios = Champion.get("Aphelios"), ashe = Champion.get("Ashe"), aurelionSol = Champion.get("Aurelion Sol"), azir = Champion.get("Azir"), bard = Champion.get("Bard"), blitzcrank = Champion.get("Blitzcrank"), brand = Champion.get("Brand"), braum = Champion.get("Braum"), caitlyn = Champion.get("Caitlyn"), camille = Champion.get("Camille"), cassiopeia = Champion.get("Cassiopeia"), choGath = Champion.get("Cho'Gath"), corki = Champion.get("Corki"), darius = Champion.get("Darius"), diana = Champion.get("Diana"), drMundo = Champion.get("Dr. Mundo"), draven = Champion.get("Draven"), ekko = Champion.get("Ekko"), elise = Champion.get("Elise"), evelynn = Champion.get("Evelynn"), ezreal = Champion.get("Ezreal"), fiddlesticks = Champion.get("Fiddlesticks"), fiora = Champion.get("Fiora"), fizz = Champion.get("Fizz"), galio = Champion.get("Galio"), gangplank = Champion.get("Gangplank"), garen = Champion.get("Garen"), gnar = Champion.get("Gnar"), gragas = Champion.get("Gragas"), graves = Champion.get("Graves"), hecarim = Champion.get("Hecarim"), heimerdinger = Champion.get("Heimerdinger"), illaoi = Champion.get("Illaoi"), irelia = Champion.get("Irelia"), ivern = Champion.get("Ivern"), janna = Champion.get("Janna"), jarvanIV = Champion.get("Jarvan IV"), jax = Champion.get("Jax"), jayce = Champion.get("Jayce"), jhin = Champion.get("Jhin"), jinx = Champion.get("Jinx"), kaiSa = Champion.get("Kai'Sa"), kalista = Champion.get("Kalista"), karma = Champion.get("Karma"), karthus = Champion.get("Karthus"), kassadin = Champion.get("Kassadin"), katarina = Champion.get("Katarina"), kayle = Champion.get("Kayle"), kayn = Champion.get("Kayn"), kennen = Champion.get("Kennen"), khaZix = Champion.get("Kha'Zix"), kindred = Champion.get("Kindred"), kled = Champion.get("Kled"), kogMaw = Champion.get("Kog'Maw"), leBlanc = Champion.get("LeBlanc"), leeSin = Champion.get("Lee Sin"), leona = Champion.get("Leona"), lissandra = Champion.get("Lissandra"), lucian = Champion.get("Lucian"), lulu = Champion.get("Lulu"), lux = Champion.get("Lux"), malphite = Champion.get("Malphite"), malzahar = Champion.get("Malzahar"), maokai = Champion.get("Maokai"), masterYi = Champion.get("Master Yi"), missFortune = Champion.get("Miss Fortune"), mordekaiser = Champion.get("Mordekaiser"), morgana = Champion.get("Morgana"), nami = Champion.get("Nami"), nasus = Champion.get("Nasus"), nautilus = Champion.get("Nautilus"), neeko = Champion.get("Neeko"), nidalee = Champion.get("Nidalee"), nocturne = Champion.get("Nocturne"), nunu = Champion.get("Nunu"), olaf = Champion.get("Olaf"), orianna = Champion.get("Orianna"), ornn = Champion.get("Ornn"), pantheon = Champion.get("Pantheon"), poppy = Champion.get("Poppy"), pyke = Champion.get("Pyke"), qiyana = Champion.get("Qiyana"), quinn = Champion.get("Quinn"), rakan = Champion.get("Rakan"), rammus = Champion.get("Rammus"), rekSai = Champion.get("Rek'Sai"), renekton = Champion.get("Renekton"), rengar = Champion.get("Rengar"), riven = Champion.get("Riven"), rumble = Champion.get("Rumble"), ryze = Champion.get("Ryze"), sejuani = Champion.get("Sejuani"), senna = Champion.get("Senna"), sett = Champion.get("Sett"), shaco = Champion.get("Shaco"), shen = Champion.get("Shen"), shyvana = Champion.get("Shyvana"), singed = Champion.get("Singed"), sion = Champion.get("Sion"), sivir = Champion.get("Sivir"), skarner = Champion.get("Skarner"), sona = Champion.get("Sona"), soraka = Champion.get("Soraka"), swain = Champion.get("Swain"), sylas = Champion.get("Sylas"), syndra = Champion.get("Syndra"), tahmKench = Champion.get("Tahm Kench"), taliyah = Champion.get("Taliyah"), talon = Champion.get("Talon"), taric = Champion.get("Taric"), teemo = Champion.get("Teemo"), thresh = Champion.get("Thresh"), tristana = Champion.get("Tristana"), trundle = Champion.get("Trundle"), tryndamere = Champion.get("Tryndamere"), twistedFate = Champion.get("Twisted Fate"), twitch = Champion.get("Twitch"), udyr = Champion.get("Udyr"), urgot = Champion.get("Urgot"), varus = Champion.get("Varus"), vayne = Champion.get("Vayne"), veigar = Champion.get("Veigar"), velKoz = Champion.get("Vel'Koz"), vi = Champion.get("Vi"), viktor = Champion.get("Viktor"), vladimir = Champion.get("Vladimir"), volibear = Champion.get("Volibear"), warwick = Champion.get("Warwick"), wukong = Champion.get("Wukong"), xayah = Champion.get("Xayah"), xerath = Champion.get("Xerath"), xinZhao = Champion.get("Xin Zhao"), yasuo = Champion.get("Yasuo"), yorick = Champion.get("Yorick"), yuumi = Champion.get("Yuumi"), zac = Champion.get("Zac"), zed = Champion.get("Zed"), ziggs = Champion.get("Ziggs"), zilean = Champion.get("Zilean"), zoe = Champion.get("Zoe"), zyra = Champion.get("Zyra");
+    const toDoDescription = "TO DO: details!";
+    aatrox.addGoodAgainst(gangplank, toDoDescription);
+    aatrox.addGoodAgainst(darius, toDoDescription);
+    aatrox.addGoodAgainst(galio, toDoDescription);
+    aatrox.addGoodWith(gnar, toDoDescription);
+    aatrox.addGoodWith(yasuo, toDoDescription);
+    aatrox.addGoodWith(azir, toDoDescription);
+    ahri.addGoodAgainst(choGath, toDoDescription);
+    ahri.addGoodAgainst(azir, toDoDescription);
+    ahri.addGoodAgainst(viktor, toDoDescription);
+    ahri.addGoodWith(jax, toDoDescription);
+    ahri.addGoodWith(riven, toDoDescription);
+    ahri.addGoodWith(irelia, toDoDescription);
+    akali.addGoodAgainst(nasus, toDoDescription);
+    akali.addGoodAgainst(garen, toDoDescription);
+    akali.addGoodAgainst(poppy, toDoDescription);
+    akali.addGoodWith(diana, toDoDescription);
+    akali.addGoodWith(leBlanc, toDoDescription);
+    akali.addGoodWith(katarina, toDoDescription);
+    amumu.addGoodAgainst(graves, toDoDescription);
+    amumu.addGoodAgainst(shyvana, toDoDescription);
+    amumu.addGoodAgainst(leeSin, toDoDescription);
+    amumu.addGoodWith(katarina, toDoDescription);
+    amumu.addGoodWith(fiddlesticks, toDoDescription);
+    amumu.addGoodWith(morgana, toDoDescription);
+    anivia.addGoodAgainst(kayle, toDoDescription);
+    anivia.addGoodAgainst(azir, toDoDescription);
+    anivia.addGoodAgainst(akali, toDoDescription);
+    anivia.addGoodWith(jarvanIV, toDoDescription);
+    anivia.addGoodWith(drMundo, toDoDescription);
+    anivia.addGoodWith(vayne, toDoDescription);
+    annie.addGoodAgainst(diana, toDoDescription);
+    annie.addGoodAgainst(jayce, toDoDescription);
+    annie.addGoodAgainst(viktor, toDoDescription);
+    annie.addGoodWith(jinx, toDoDescription);
+    annie.addGoodWith(amumu, toDoDescription);
+    annie.addGoodWith(lucian, toDoDescription);
+    ashe.addGoodAgainst(corki, toDoDescription);
+    ashe.addGoodAgainst(lucian, toDoDescription);
+    ashe.addGoodAgainst(sivir, toDoDescription);
+    ashe.addGoodWith(leona, toDoDescription);
+    ashe.addGoodWith(janna, toDoDescription);
+    ashe.addGoodWith(thresh, toDoDescription);
+    azir.addGoodAgainst(yasuo, toDoDescription);
+    azir.addGoodAgainst(taliyah, toDoDescription);
+    azir.addGoodAgainst(syndra, toDoDescription);
+    azir.addGoodWith(aatrox, toDoDescription);
+    azir.addGoodWith(yasuo, toDoDescription);
+    azir.addGoodWith(alistar, toDoDescription);
+    bard.addGoodAgainst(veigar, toDoDescription);
+    bard.addGoodAgainst(nautilus, toDoDescription);
+    bard.addGoodAgainst(braum, toDoDescription);
+    bard.addGoodWith(sion, toDoDescription);
+    bard.addGoodWith(heimerdinger, toDoDescription);
+    bard.addGoodWith(jhin, toDoDescription);
+    blitzcrank.addGoodAgainst(lux, toDoDescription);
+    blitzcrank.addGoodAgainst(zyra, toDoDescription);
+    blitzcrank.addGoodAgainst(nami, toDoDescription);
+    blitzcrank.addGoodWith(jinx, toDoDescription);
+    blitzcrank.addGoodWith(vayne, toDoDescription);
+    blitzcrank.addGoodWith(ezreal, toDoDescription);
+    brand.addGoodAgainst(velKoz, toDoDescription);
+    brand.addGoodAgainst(rakan, toDoDescription);
+    brand.addGoodAgainst(braum, toDoDescription);
+    brand.addGoodWith(amumu, toDoDescription);
+    brand.addGoodWith(sona, toDoDescription);
+    brand.addGoodWith(maokai, toDoDescription);
+    braum.addGoodAgainst(fiddlesticks, toDoDescription);
+    braum.addGoodAgainst(karma, toDoDescription);
+    braum.addGoodAgainst(lux, toDoDescription);
+    braum.addGoodWith(lucian, toDoDescription);
+    braum.addGoodWith(ezreal, toDoDescription);
+    braum.addGoodWith(twitch, toDoDescription);
+    caitlyn.addGoodAgainst(ezreal, toDoDescription);
+    caitlyn.addGoodAgainst(ziggs, toDoDescription);
+    caitlyn.addGoodAgainst(xayah, toDoDescription);
+    caitlyn.addGoodWith(leona, toDoDescription);
+    caitlyn.addGoodWith(thresh, toDoDescription);
+    caitlyn.addGoodWith(nami, toDoDescription);
+    camille.addGoodAgainst(cassiopeia, toDoDescription);
+    camille.addGoodAgainst(garen, toDoDescription);
+    camille.addGoodAgainst(drMundo, toDoDescription);
+    camille.addGoodWith(bard, toDoDescription);
+    camille.addGoodWith(thresh, toDoDescription);
+    camille.addGoodWith(galio, toDoDescription);
+    cassiopeia.addGoodAgainst(ryze, toDoDescription);
+    cassiopeia.addGoodAgainst(azir, toDoDescription);
+    cassiopeia.addGoodAgainst(zed, toDoDescription);
+    cassiopeia.addGoodWith(teemo, toDoDescription);
+    cassiopeia.addGoodWith(singed, toDoDescription);
+    cassiopeia.addGoodWith(yorick, toDoDescription);
+    choGath.addGoodAgainst(galio, toDoDescription);
+    choGath.addGoodAgainst(pantheon, toDoDescription);
+    choGath.addGoodAgainst(gragas, toDoDescription);
+    choGath.addGoodWith(yasuo, toDoDescription);
+    choGath.addGoodWith(lulu, toDoDescription);
+    choGath.addGoodWith(aatrox, toDoDescription);
+    corki.addGoodAgainst(diana, toDoDescription);
+    corki.addGoodAgainst(ryze, toDoDescription);
+    corki.addGoodAgainst(ziggs, toDoDescription);
+    corki.addGoodWith(leona, toDoDescription);
+    corki.addGoodWith(thresh, toDoDescription);
+    corki.addGoodWith(blitzcrank, toDoDescription);
+    darius.addGoodAgainst(nautilus, toDoDescription);
+    darius.addGoodAgainst(galio, toDoDescription);
+    darius.addGoodAgainst(choGath, toDoDescription);
+    darius.addGoodWith(draven, toDoDescription);
+    darius.addGoodWith(olaf, toDoDescription);
+    darius.addGoodWith(fiora, toDoDescription);
+    diana.addGoodAgainst(zed, toDoDescription);
+    diana.addGoodAgainst(leBlanc, toDoDescription);
+    diana.addGoodAgainst(lux, toDoDescription);
+    diana.addGoodWith(akali, toDoDescription);
+    diana.addGoodWith(yasuo, toDoDescription);
+    diana.addGoodWith(kassadin, toDoDescription);
+    drMundo.addGoodAgainst(darius, toDoDescription);
+    drMundo.addGoodAgainst(teemo, toDoDescription);
+    drMundo.addGoodAgainst(irelia, toDoDescription);
+    drMundo.addGoodWith(anivia, toDoDescription);
+    drMundo.addGoodWith(olaf, toDoDescription);
+    drMundo.addGoodWith(jax, toDoDescription);
+    draven.addGoodAgainst(corki, toDoDescription);
+    draven.addGoodAgainst(sivir, toDoDescription);
+    draven.addGoodAgainst(lucian, toDoDescription);
+    draven.addGoodWith(thresh, toDoDescription);
+    draven.addGoodWith(darius, toDoDescription);
+    draven.addGoodWith(leona, toDoDescription);
+    ekko.addGoodAgainst(azir, toDoDescription);
+    ekko.addGoodAgainst(karma, toDoDescription);
+    ekko.addGoodAgainst(zed, toDoDescription);
+    ekko.addGoodWith(galio, toDoDescription);
+    ekko.addGoodWith(bard, toDoDescription);
+    ekko.addGoodWith(lulu, toDoDescription);
+    elise.addGoodAgainst(choGath, toDoDescription);
+    elise.addGoodAgainst(rekSai, toDoDescription);
+    elise.addGoodAgainst(udyr, toDoDescription);
+    elise.addGoodWith(rengar, toDoDescription);
+    elise.addGoodWith(blitzcrank, toDoDescription);
+    elise.addGoodWith(karma, toDoDescription);
+    evelynn.addGoodAgainst(graves, toDoDescription);
+    evelynn.addGoodAgainst(skarner, toDoDescription);
+    evelynn.addGoodAgainst(nidalee, toDoDescription);
+    evelynn.addGoodWith(choGath, toDoDescription);
+    evelynn.addGoodWith(shen, toDoDescription);
+    evelynn.addGoodWith(orianna, toDoDescription);
+    ezreal.addGoodAgainst(varus, toDoDescription);
+    ezreal.addGoodAgainst(lucian, toDoDescription);
+    ezreal.addGoodAgainst(kalista, toDoDescription);
+    ezreal.addGoodWith(sona, toDoDescription);
+    ezreal.addGoodWith(taric, toDoDescription);
+    ezreal.addGoodWith(leona, toDoDescription);
+    fiddlesticks.addGoodAgainst(graves, toDoDescription);
+    fiddlesticks.addGoodAgainst(amumu, toDoDescription);
+    fiddlesticks.addGoodAgainst(rekSai, toDoDescription);
+    fiddlesticks.addGoodWith(amumu, toDoDescription);
+    fiddlesticks.addGoodWith(galio, toDoDescription);
+    fiddlesticks.addGoodWith(kennen, toDoDescription);
+    fiora.addGoodAgainst(galio, toDoDescription);
+    fiora.addGoodAgainst(choGath, toDoDescription);
+    fiora.addGoodAgainst(nautilus, toDoDescription);
+    fiora.addGoodWith(darius, toDoDescription);
+    fiora.addGoodWith(volibear, toDoDescription);
+    fiora.addGoodWith(ahri, toDoDescription);
+    fizz.addGoodAgainst(ryze, toDoDescription);
+    fizz.addGoodAgainst(aurelionSol, toDoDescription);
+    fizz.addGoodAgainst(syndra, toDoDescription);
+    fizz.addGoodWith(talon, toDoDescription);
+    fizz.addGoodWith(amumu, toDoDescription);
+    fizz.addGoodWith(nami, toDoDescription);
+    galio.addGoodAgainst(drMundo, toDoDescription);
+    galio.addGoodAgainst(poppy, toDoDescription);
+    galio.addGoodAgainst(mordekaiser, toDoDescription);
+    galio.addGoodWith(katarina, toDoDescription);
+    galio.addGoodWith(wukong, toDoDescription);
+    galio.addGoodWith(nunu, toDoDescription);
+    gangplank.addGoodAgainst(lissandra, toDoDescription);
+    gangplank.addGoodAgainst(galio, toDoDescription);
+    gangplank.addGoodAgainst(shen, toDoDescription);
+    gangplank.addGoodWith(amumu, toDoDescription);
+    gangplank.addGoodWith(nunu, toDoDescription);
+    gangplank.addGoodWith(twistedFate, toDoDescription);
+    garen.addGoodAgainst(malphite, toDoDescription);
+    garen.addGoodAgainst(shen, toDoDescription);
+    garen.addGoodAgainst(gangplank, toDoDescription);
+    garen.addGoodWith(lux, toDoDescription);
+    garen.addGoodWith(darius, toDoDescription);
+    garen.addGoodWith(aatrox, toDoDescription);
+    gnar.addGoodAgainst(garen, toDoDescription);
+    gnar.addGoodAgainst(yorick, toDoDescription);
+    gnar.addGoodAgainst(xinZhao, toDoDescription);
+    gnar.addGoodWith(aatrox, toDoDescription);
+    gnar.addGoodWith(jarvanIV, toDoDescription);
+    gnar.addGoodWith(braum, toDoDescription);
+    gragas.addGoodAgainst(diana, toDoDescription);
+    gragas.addGoodAgainst(leeSin, toDoDescription);
+    gragas.addGoodAgainst(udyr, toDoDescription);
+    gragas.addGoodWith(ashe, toDoDescription);
+    gragas.addGoodWith(malphite, toDoDescription);
+    gragas.addGoodWith(yasuo, toDoDescription);
+    graves.addGoodAgainst(shyvana, toDoDescription);
+    graves.addGoodAgainst(olaf, toDoDescription);
+    graves.addGoodAgainst(xinZhao, toDoDescription);
+    graves.addGoodWith(taric, toDoDescription);
+    graves.addGoodWith(leona, toDoDescription);
+    graves.addGoodWith(thresh, toDoDescription);
+    hecarim.addGoodAgainst(wukong, toDoDescription);
+    hecarim.addGoodAgainst(graves, toDoDescription);
+    hecarim.addGoodAgainst(rekSai, toDoDescription);
+    hecarim.addGoodWith(orianna, toDoDescription);
+    hecarim.addGoodWith(zilean, toDoDescription);
+    hecarim.addGoodWith(malphite, toDoDescription);
+    heimerdinger.addGoodAgainst(illaoi, toDoDescription);
+    heimerdinger.addGoodAgainst(camille, toDoDescription);
+    heimerdinger.addGoodAgainst(shen, toDoDescription);
+    heimerdinger.addGoodWith(blitzcrank, toDoDescription);
+    heimerdinger.addGoodWith(thresh, toDoDescription);
+    heimerdinger.addGoodWith(vi, toDoDescription);
+    illaoi.addGoodAgainst(galio, toDoDescription);
+    illaoi.addGoodAgainst(shen, toDoDescription);
+    illaoi.addGoodAgainst(jayce, toDoDescription);
+    illaoi.addGoodWith(galio, toDoDescription);
+    illaoi.addGoodWith(camille, toDoDescription);
+    illaoi.addGoodWith(lulu, toDoDescription);
+    irelia.addGoodAgainst(nasus, toDoDescription);
+    irelia.addGoodAgainst(poppy, toDoDescription);
+    irelia.addGoodAgainst(rengar, toDoDescription);
+    irelia.addGoodWith(riven, toDoDescription);
+    irelia.addGoodWith(ahri, toDoDescription);
+    irelia.addGoodWith(malphite, toDoDescription);
+    ivern.addGoodAgainst(udyr, toDoDescription);
+    ivern.addGoodAgainst(fiddlesticks, toDoDescription);
+    ivern.addGoodAgainst(shyvana, toDoDescription);
+    ivern.addGoodWith(yasuo, toDoDescription);
+    ivern.addGoodWith(xayah, toDoDescription);
+    ivern.addGoodWith(riven, toDoDescription);
+    janna.addGoodAgainst(annie, toDoDescription);
+    janna.addGoodAgainst(nautilus, toDoDescription);
+    janna.addGoodAgainst(taric, toDoDescription);
+    janna.addGoodWith(yasuo, toDoDescription);
+    janna.addGoodWith(draven, toDoDescription);
+    janna.addGoodWith(ashe, toDoDescription);
+    jarvanIV.addGoodAgainst(rekSai, toDoDescription);
+    jarvanIV.addGoodAgainst(olaf, toDoDescription);
+    jarvanIV.addGoodAgainst(xinZhao, toDoDescription);
+    jarvanIV.addGoodWith(orianna, toDoDescription);
+    jarvanIV.addGoodWith(gnar, toDoDescription);
+    jarvanIV.addGoodWith(katarina, toDoDescription);
+    jax.addGoodAgainst(tahmKench, toDoDescription);
+    jax.addGoodAgainst(nautilus, toDoDescription);
+    jax.addGoodAgainst(ekko, toDoDescription);
+    jax.addGoodWith(ahri, toDoDescription);
+    jax.addGoodWith(pantheon, toDoDescription);
+    jax.addGoodWith(teemo, toDoDescription);
+    jayce.addGoodAgainst(drMundo, toDoDescription);
+    jayce.addGoodAgainst(urgot, toDoDescription);
+    jayce.addGoodAgainst(cassiopeia, toDoDescription);
+    jayce.addGoodWith(nidalee, toDoDescription);
+    jayce.addGoodWith(skarner, toDoDescription);
+    jayce.addGoodWith(leona, toDoDescription);
+    jhin.addGoodAgainst(ezreal, toDoDescription);
+    jhin.addGoodAgainst(corki, toDoDescription);
+    jhin.addGoodAgainst(lucian, toDoDescription);
+    jhin.addGoodWith(leona, toDoDescription);
+    jhin.addGoodWith(bard, toDoDescription);
+    jhin.addGoodWith(thresh, toDoDescription);
+    jinx.addGoodAgainst(sivir, toDoDescription);
+    jinx.addGoodAgainst(kalista, toDoDescription);
+    jinx.addGoodAgainst(ashe, toDoDescription);
+    jinx.addGoodWith(leona, toDoDescription);
+    jinx.addGoodWith(blitzcrank, toDoDescription);
+    jinx.addGoodWith(thresh, toDoDescription);
+    kaiSa.addGoodAgainst(corki, toDoDescription);
+    kaiSa.addGoodAgainst(kalista, toDoDescription);
+    kaiSa.addGoodAgainst(ashe, toDoDescription);
+    kaiSa.addGoodWith(leona, toDoDescription);
+    kaiSa.addGoodWith(thresh, toDoDescription);
+    kaiSa.addGoodWith(zac, toDoDescription);
+    kalista.addGoodAgainst(corki, toDoDescription);
+    kalista.addGoodAgainst(lucian, toDoDescription);
+    kalista.addGoodAgainst(varus, toDoDescription);
+    kalista.addGoodWith(tahmKench, toDoDescription);
+    kalista.addGoodWith(alistar, toDoDescription);
+    kalista.addGoodWith(thresh, toDoDescription);
+    karma.addGoodAgainst(veigar, toDoDescription);
+    karma.addGoodAgainst(zilean, toDoDescription);
+    karma.addGoodAgainst(morgana, toDoDescription);
+    karma.addGoodWith(jinx, toDoDescription);
+    karma.addGoodWith(ezreal, toDoDescription);
+    karma.addGoodWith(vayne, toDoDescription);
+    karthus.addGoodAgainst(yasuo, toDoDescription);
+    karthus.addGoodAgainst(twistedFate, toDoDescription);
+    karthus.addGoodAgainst(kassadin, toDoDescription);
+    karthus.addGoodWith(kayle, toDoDescription);
+    karthus.addGoodWith(amumu, toDoDescription);
+    karthus.addGoodWith(yorick, toDoDescription);
+    kassadin.addGoodAgainst(azir, toDoDescription);
+    kassadin.addGoodAgainst(karma, toDoDescription);
+    kassadin.addGoodAgainst(leBlanc, toDoDescription);
+    kassadin.addGoodWith(diana, toDoDescription);
+    kassadin.addGoodWith(ahri, toDoDescription);
+    kassadin.addGoodWith(leeSin, toDoDescription);
+    katarina.addGoodAgainst(ryze, toDoDescription);
+    katarina.addGoodAgainst(syndra, toDoDescription);
+    katarina.addGoodAgainst(viktor, toDoDescription);
+    katarina.addGoodWith(amumu, toDoDescription);
+    katarina.addGoodWith(galio, toDoDescription);
+    katarina.addGoodWith(morgana, toDoDescription);
+    kayle.addGoodAgainst(garen, toDoDescription);
+    kayle.addGoodAgainst(poppy, toDoDescription);
+    kayle.addGoodAgainst(galio, toDoDescription);
+    kayle.addGoodWith(ezreal, toDoDescription);
+    kayle.addGoodWith(katarina, toDoDescription);
+    kayle.addGoodWith(karthus, toDoDescription);
+    kennen.addGoodAgainst(shen, toDoDescription);
+    kennen.addGoodAgainst(quinn, toDoDescription);
+    kennen.addGoodAgainst(mordekaiser, toDoDescription);
+    kennen.addGoodWith(amumu, toDoDescription);
+    kennen.addGoodWith(vladimir, toDoDescription);
+    kennen.addGoodWith(fiddlesticks, toDoDescription);
+    khaZix.addGoodAgainst(diana, toDoDescription);
+    khaZix.addGoodAgainst(graves, toDoDescription);
+    khaZix.addGoodAgainst(olaf, toDoDescription);
+    khaZix.addGoodWith(rengar, toDoDescription);
+    khaZix.addGoodWith(xinZhao, toDoDescription);
+    khaZix.addGoodWith(nasus, toDoDescription);
+    kindred.addGoodAgainst(rekSai, toDoDescription);
+    kindred.addGoodAgainst(xinZhao, toDoDescription);
+    kindred.addGoodAgainst(fiddlesticks, toDoDescription);
+    kindred.addGoodWith(galio, toDoDescription);
+    kindred.addGoodWith(sion, toDoDescription);
+    kindred.addGoodWith(zed, toDoDescription);
+    kled.addGoodAgainst(rengar, toDoDescription);
+    kled.addGoodAgainst(choGath, toDoDescription);
+    kled.addGoodAgainst(quinn, toDoDescription);
+    kled.addGoodWith(galio, toDoDescription);
+    kled.addGoodWith(camille, toDoDescription);
+    kled.addGoodWith(masterYi, toDoDescription);
+    kogMaw.addGoodAgainst(corki, toDoDescription);
+    kogMaw.addGoodAgainst(jhin, toDoDescription);
+    kogMaw.addGoodAgainst(lucian, toDoDescription);
+    kogMaw.addGoodWith(nunu, toDoDescription);
+    kogMaw.addGoodWith(lulu, toDoDescription);
+    kogMaw.addGoodWith(nami, toDoDescription);
+    leBlanc.addGoodAgainst(ryze, toDoDescription);
+    leBlanc.addGoodAgainst(karma, toDoDescription);
+    leBlanc.addGoodAgainst(lux, toDoDescription);
+    leBlanc.addGoodWith(akali, toDoDescription);
+    leBlanc.addGoodWith(veigar, toDoDescription);
+    leBlanc.addGoodWith(alistar, toDoDescription);
+    leeSin.addGoodAgainst(choGath, toDoDescription);
+    leeSin.addGoodAgainst(aatrox, toDoDescription);
+    leeSin.addGoodAgainst(rengar, toDoDescription);
+    leeSin.addGoodWith(yasuo, toDoDescription);
+    leeSin.addGoodWith(teemo, toDoDescription);
+    leeSin.addGoodWith(aatrox, toDoDescription);
+    leona.addGoodAgainst(lux, toDoDescription);
+    leona.addGoodAgainst(lulu, toDoDescription);
+    leona.addGoodAgainst(nami, toDoDescription);
+    leona.addGoodWith(jhin, toDoDescription);
+    leona.addGoodWith(draven, toDoDescription);
+    leona.addGoodWith(xayah, toDoDescription);
+    lissandra.addGoodAgainst(veigar, toDoDescription);
+    lissandra.addGoodAgainst(leBlanc, toDoDescription);
+    lissandra.addGoodAgainst(cassiopeia, toDoDescription);
+    lissandra.addGoodWith(sejuani, toDoDescription);
+    lissandra.addGoodWith(trundle, toDoDescription);
+    lissandra.addGoodWith(amumu, toDoDescription);
+    lucian.addGoodAgainst(ezreal, toDoDescription);
+    lucian.addGoodAgainst(vayne, toDoDescription);
+    lucian.addGoodAgainst(corki, toDoDescription);
+    lucian.addGoodWith(braum, toDoDescription);
+    lucian.addGoodWith(thresh, toDoDescription);
+    lucian.addGoodWith(leona, toDoDescription);
+    lulu.addGoodAgainst(lux, toDoDescription);
+    lulu.addGoodAgainst(rakan, toDoDescription);
+    lulu.addGoodAgainst(annie, toDoDescription);
+    lulu.addGoodWith(vayne, toDoDescription);
+    lulu.addGoodWith(caitlyn, toDoDescription);
+    lulu.addGoodWith(ezreal, toDoDescription);
+    lux.addGoodAgainst(ryze, toDoDescription);
+    lux.addGoodAgainst(galio, toDoDescription);
+    lux.addGoodAgainst(akali, toDoDescription);
+    lux.addGoodWith(ezreal, toDoDescription);
+    lux.addGoodWith(garen, toDoDescription);
+    lux.addGoodWith(jinx, toDoDescription);
+    malphite.addGoodAgainst(nautilus, toDoDescription);
+    malphite.addGoodAgainst(poppy, toDoDescription);
+    malphite.addGoodAgainst(irelia, toDoDescription);
+    malphite.addGoodWith(yasuo, toDoDescription);
+    malphite.addGoodWith(orianna, toDoDescription);
+    malphite.addGoodWith(katarina, toDoDescription);
+    malzahar.addGoodAgainst(akali, toDoDescription);
+    malzahar.addGoodAgainst(karma, toDoDescription);
+    malzahar.addGoodAgainst(vladimir, toDoDescription);
+    malzahar.addGoodWith(warwick, toDoDescription);
+    malzahar.addGoodWith(amumu, toDoDescription);
+    malzahar.addGoodWith(jarvanIV, toDoDescription);
+    maokai.addGoodAgainst(shen, toDoDescription);
+    maokai.addGoodAgainst(gragas, toDoDescription);
+    maokai.addGoodAgainst(kled, toDoDescription);
+    maokai.addGoodWith(ryze, toDoDescription);
+    maokai.addGoodWith(vladimir, toDoDescription);
+    maokai.addGoodWith(swain, toDoDescription);
+    masterYi.addGoodAgainst(trundle, toDoDescription);
+    masterYi.addGoodAgainst(diana, toDoDescription);
+    masterYi.addGoodAgainst(wukong, toDoDescription);
+    masterYi.addGoodWith(ashe, toDoDescription);
+    masterYi.addGoodWith(aatrox, toDoDescription);
+    masterYi.addGoodWith(ahri, toDoDescription);
+    missFortune.addGoodAgainst(corki, toDoDescription);
+    missFortune.addGoodAgainst(ezreal, toDoDescription);
+    missFortune.addGoodAgainst(xayah, toDoDescription);
+    missFortune.addGoodWith(sona, toDoDescription);
+    missFortune.addGoodWith(leona, toDoDescription);
+    missFortune.addGoodWith(blitzcrank, toDoDescription);
+    mordekaiser.addGoodAgainst(shen, toDoDescription);
+    mordekaiser.addGoodAgainst(malphite, toDoDescription);
+    mordekaiser.addGoodAgainst(irelia, toDoDescription);
+    mordekaiser.addGoodWith(yorick, toDoDescription);
+    mordekaiser.addGoodWith(malphite, toDoDescription);
+    mordekaiser.addGoodWith(wukong, toDoDescription);
+    morgana.addGoodAgainst(veigar, toDoDescription);
+    morgana.addGoodAgainst(lux, toDoDescription);
+    morgana.addGoodAgainst(rakan, toDoDescription);
+    morgana.addGoodWith(jinx, toDoDescription);
+    morgana.addGoodWith(caitlyn, toDoDescription);
+    morgana.addGoodWith(varus, toDoDescription);
+    nami.addGoodAgainst(trundle, toDoDescription);
+    nami.addGoodAgainst(lux, toDoDescription);
+    nami.addGoodAgainst(rakan, toDoDescription);
+    nami.addGoodWith(vayne, toDoDescription);
+    nami.addGoodWith(jinx, toDoDescription);
+    nami.addGoodWith(caitlyn, toDoDescription);
+    nasus.addGoodAgainst(galio, toDoDescription);
+    nasus.addGoodAgainst(malphite, toDoDescription);
+    nasus.addGoodAgainst(poppy, toDoDescription);
+    nasus.addGoodWith(renekton, toDoDescription);
+    nasus.addGoodWith(zed, toDoDescription);
+    nasus.addGoodWith(khaZix, toDoDescription);
+    nautilus.addGoodAgainst(karma, toDoDescription);
+    nautilus.addGoodAgainst(brand, toDoDescription);
+    nautilus.addGoodAgainst(leona, toDoDescription);
+    nautilus.addGoodWith(yasuo, toDoDescription);
+    nautilus.addGoodWith(draven, toDoDescription);
+    nautilus.addGoodWith(ezreal, toDoDescription);
+    neeko.addGoodAgainst(leeSin, toDoDescription);
+    neeko.addGoodAgainst(rengar, toDoDescription);
+    neeko.addGoodAgainst(rekSai, toDoDescription);
+    neeko.addGoodWith(morgana, toDoDescription);
+    neeko.addGoodWith(katarina, toDoDescription);
+    neeko.addGoodWith(fiddlesticks, toDoDescription);
+    nidalee.addGoodAgainst(graves, toDoDescription);
+    nidalee.addGoodAgainst(rengar, toDoDescription);
+    nidalee.addGoodAgainst(rekSai, toDoDescription);
+    nidalee.addGoodWith(caitlyn, toDoDescription);
+    nidalee.addGoodWith(varus, toDoDescription);
+    nidalee.addGoodWith(jayce, toDoDescription);
+    nocturne.addGoodAgainst(rengar, toDoDescription);
+    nocturne.addGoodAgainst(pantheon, toDoDescription);
+    nocturne.addGoodAgainst(sejuani, toDoDescription);
+    nocturne.addGoodWith(twistedFate, toDoDescription);
+    nocturne.addGoodWith(shen, toDoDescription);
+    nocturne.addGoodWith(rengar, toDoDescription);
+    nunu.addGoodAgainst(graves, toDoDescription);
+    nunu.addGoodAgainst(skarner, toDoDescription);
+    nunu.addGoodAgainst(shyvana, toDoDescription);
+    nunu.addGoodWith(vayne, toDoDescription);
+    nunu.addGoodWith(kogMaw, toDoDescription);
+    nunu.addGoodWith(caitlyn, toDoDescription);
+    olaf.addGoodAgainst(fiddlesticks, toDoDescription);
+    olaf.addGoodAgainst(hecarim, toDoDescription);
+    olaf.addGoodAgainst(shaco, toDoDescription);
+    olaf.addGoodWith(darius, toDoDescription);
+    olaf.addGoodWith(blitzcrank, toDoDescription);
+    olaf.addGoodWith(aatrox, toDoDescription);
+    orianna.addGoodAgainst(ryze, toDoDescription);
+    orianna.addGoodAgainst(gangplank, toDoDescription);
+    orianna.addGoodAgainst(diana, toDoDescription);
+    orianna.addGoodWith(malphite, toDoDescription);
+    orianna.addGoodWith(yasuo, toDoDescription);
+    orianna.addGoodWith(jarvanIV, toDoDescription);
+    ornn.addGoodAgainst(galio, toDoDescription);
+    ornn.addGoodAgainst(malphite, toDoDescription);
+    ornn.addGoodAgainst(shen, toDoDescription);
+    ornn.addGoodWith(janna, toDoDescription);
+    ornn.addGoodWith(lulu, toDoDescription);
+    ornn.addGoodWith(thresh, toDoDescription);
+    pantheon.addGoodAgainst(drMundo, toDoDescription);
+    pantheon.addGoodAgainst(nasus, toDoDescription);
+    pantheon.addGoodAgainst(nautilus, toDoDescription);
+    pantheon.addGoodWith(taric, toDoDescription);
+    pantheon.addGoodWith(jax, toDoDescription);
+    pantheon.addGoodWith(sion, toDoDescription);
+    poppy.addGoodAgainst(illaoi, toDoDescription);
+    poppy.addGoodAgainst(olaf, toDoDescription);
+    poppy.addGoodAgainst(kled, toDoDescription);
+    poppy.addGoodWith(sion, toDoDescription);
+    poppy.addGoodWith(vayne, toDoDescription);
+    poppy.addGoodWith(choGath, toDoDescription);
+    pyke.addGoodAgainst(velKoz, toDoDescription);
+    pyke.addGoodAgainst(zoe, toDoDescription);
+    pyke.addGoodAgainst(annie, toDoDescription);
+    pyke.addGoodWith(missFortune, toDoDescription);
+    pyke.addGoodWith(jhin, toDoDescription);
+    pyke.addGoodWith(kaiSa, toDoDescription);
+    qiyana.addGoodAgainst(xerath, toDoDescription);
+    qiyana.addGoodAgainst(viktor, toDoDescription);
+    qiyana.addGoodAgainst(neeko, toDoDescription);
+    quinn.addGoodAgainst(tryndamere, toDoDescription);
+    quinn.addGoodAgainst(jax, toDoDescription);
+    quinn.addGoodAgainst(renekton, toDoDescription);
+    quinn.addGoodWith(leona, toDoDescription);
+    quinn.addGoodWith(thresh, toDoDescription);
+    quinn.addGoodWith(nami, toDoDescription);
+    rakan.addGoodAgainst(lux, toDoDescription);
+    rakan.addGoodAgainst(karma, toDoDescription);
+    rakan.addGoodAgainst(tahmKench, toDoDescription);
+    rakan.addGoodWith(xayah, toDoDescription);
+    rakan.addGoodWith(missFortune, toDoDescription);
+    rakan.addGoodWith(jhin, toDoDescription);
+    rengar.addGoodAgainst(shyvana, toDoDescription);
+    rengar.addGoodAgainst(vi, toDoDescription);
+    rengar.addGoodAgainst(evelynn, toDoDescription);
+    rengar.addGoodWith(khaZix, toDoDescription);
+    rengar.addGoodWith(orianna, toDoDescription);
+    rengar.addGoodWith(elise, toDoDescription);
+    riven.addGoodAgainst(volibear, toDoDescription);
+    riven.addGoodAgainst(tahmKench, toDoDescription);
+    riven.addGoodAgainst(galio, toDoDescription);
+    riven.addGoodWith(irelia, toDoDescription);
+    riven.addGoodWith(yasuo, toDoDescription);
+    riven.addGoodWith(ahri, toDoDescription);
+    rumble.addGoodAgainst(drMundo, toDoDescription);
+    rumble.addGoodAgainst(nasus, toDoDescription);
+    rumble.addGoodAgainst(malphite, toDoDescription);
+    rumble.addGoodWith(jarvanIV, toDoDescription);
+    rumble.addGoodWith(amumu, toDoDescription);
+    rumble.addGoodWith(sona, toDoDescription);
+    ryze.addGoodAgainst(ekko, toDoDescription);
+    ryze.addGoodAgainst(corki, toDoDescription);
+    ryze.addGoodAgainst(kassadin, toDoDescription);
+    ryze.addGoodWith(maokai, toDoDescription);
+    ryze.addGoodWith(jax, toDoDescription);
+    ryze.addGoodWith(ahri, toDoDescription);
+    sejuani.addGoodAgainst(rammus, toDoDescription);
+    sejuani.addGoodAgainst(shyvana, toDoDescription);
+    sejuani.addGoodAgainst(volibear, toDoDescription);
+    sejuani.addGoodWith(lissandra, toDoDescription);
+    sejuani.addGoodWith(talon, toDoDescription);
+    sejuani.addGoodWith(katarina, toDoDescription);
+    senna.addGoodAgainst(janna, toDoDescription);
+    senna.addGoodAgainst(bard, toDoDescription);
+    senna.addGoodWith(lucian, toDoDescription);
+    senna.addGoodWith(jhin, toDoDescription);
+    senna.addGoodWith(vayne, toDoDescription);
+    sett.addGoodAgainst(yasuo, toDoDescription);
+    sett.addGoodAgainst(camille, toDoDescription);
+    shaco.addGoodAgainst(udyr, toDoDescription);
+    shaco.addGoodAgainst(graves, toDoDescription);
+    shaco.addGoodAgainst(jax, toDoDescription);
+    shaco.addGoodWith(galio, toDoDescription);
+    shaco.addGoodWith(bard, toDoDescription);
+    shaco.addGoodWith(talon, toDoDescription);
+    shen.addGoodAgainst(tahmKench, toDoDescription);
+    shen.addGoodAgainst(rengar, toDoDescription);
+    shen.addGoodAgainst(gragas, toDoDescription);
+    shen.addGoodWith(twistedFate, toDoDescription);
+    shen.addGoodWith(zed, toDoDescription);
+    shen.addGoodWith(akali, toDoDescription);
+    shyvana.addGoodAgainst(nocturne, toDoDescription);
+    shyvana.addGoodAgainst(leeSin, toDoDescription);
+    shyvana.addGoodAgainst(hecarim, toDoDescription);
+    shyvana.addGoodWith(yasuo, toDoDescription);
+    shyvana.addGoodWith(shen, toDoDescription);
+    shyvana.addGoodWith(nautilus, toDoDescription);
+    singed.addGoodAgainst(shen, toDoDescription);
+    singed.addGoodAgainst(jax, toDoDescription);
+    singed.addGoodAgainst(illaoi, toDoDescription);
+    singed.addGoodWith(cassiopeia, toDoDescription);
+    singed.addGoodWith(volibear, toDoDescription);
+    singed.addGoodWith(teemo, toDoDescription);
+    sion.addGoodAgainst(illaoi, toDoDescription);
+    sion.addGoodAgainst(nasus, toDoDescription);
+    sion.addGoodAgainst(shen, toDoDescription);
+    sion.addGoodWith(pantheon, toDoDescription);
+    sion.addGoodWith(poppy, toDoDescription);
+    sion.addGoodWith(talon, toDoDescription);
+    sivir.addGoodAgainst(ezreal, toDoDescription);
+    sivir.addGoodAgainst(xayah, toDoDescription);
+    sivir.addGoodAgainst(lucian, toDoDescription);
+    sivir.addGoodWith(leona, toDoDescription);
+    sivir.addGoodWith(soraka, toDoDescription);
+    sivir.addGoodWith(taric, toDoDescription);
+    skarner.addGoodAgainst(nocturne, toDoDescription);
+    skarner.addGoodAgainst(olaf, toDoDescription);
+    skarner.addGoodAgainst(shaco, toDoDescription);
+    skarner.addGoodWith(jayce, toDoDescription);
+    skarner.addGoodWith(heimerdinger, toDoDescription);
+    skarner.addGoodWith(thresh, toDoDescription);
+    sona.addGoodAgainst(karma, toDoDescription);
+    sona.addGoodAgainst(velKoz, toDoDescription);
+    sona.addGoodAgainst(lulu, toDoDescription);
+    sona.addGoodWith(ezreal, toDoDescription);
+    sona.addGoodWith(missFortune, toDoDescription);
+    sona.addGoodWith(caitlyn, toDoDescription);
+    soraka.addGoodAgainst(veigar, toDoDescription);
+    soraka.addGoodAgainst(morgana, toDoDescription);
+    soraka.addGoodAgainst(velKoz, toDoDescription);
+    soraka.addGoodWith(ezreal, toDoDescription);
+    soraka.addGoodWith(sivir, toDoDescription);
+    soraka.addGoodWith(urgot, toDoDescription);
+    swain.addGoodAgainst(illaoi, toDoDescription);
+    swain.addGoodAgainst(shen, toDoDescription);
+    swain.addGoodAgainst(garen, toDoDescription);
+    swain.addGoodWith(vladimir, toDoDescription);
+    swain.addGoodWith(maokai, toDoDescription);
+    swain.addGoodWith(alistar, toDoDescription);
+    sylas.addGoodAgainst(zoe, toDoDescription);
+    sylas.addGoodAgainst(xerath, toDoDescription);
+    sylas.addGoodAgainst(swain, toDoDescription);
+    syndra.addGoodAgainst(ryze, toDoDescription);
+    syndra.addGoodAgainst(diana, toDoDescription);
+    syndra.addGoodAgainst(kennen, toDoDescription);
+    syndra.addGoodWith(zac, toDoDescription);
+    syndra.addGoodWith(zilean, toDoDescription);
+    syndra.addGoodWith(nami, toDoDescription);
+    tahmKench.addGoodAgainst(karma, toDoDescription);
+    tahmKench.addGoodAgainst(taric, toDoDescription);
+    tahmKench.addGoodAgainst(brand, toDoDescription);
+    tahmKench.addGoodWith(jinx, toDoDescription);
+    tahmKench.addGoodWith(jhin, toDoDescription);
+    taliyah.addGoodAgainst(ryze, toDoDescription);
+    taliyah.addGoodAgainst(veigar, toDoDescription);
+    taliyah.addGoodAgainst(syndra, toDoDescription);
+    taliyah.addGoodWith(talon, toDoDescription);
+    taliyah.addGoodWith(twistedFate, toDoDescription);
+    taliyah.addGoodWith(kindred, toDoDescription);
+    talon.addGoodAgainst(karma, toDoDescription);
+    talon.addGoodAgainst(lissandra, toDoDescription);
+    talon.addGoodAgainst(ekko, toDoDescription);
+    talon.addGoodWith(zed, toDoDescription);
+    talon.addGoodWith(fizz, toDoDescription);
+    talon.addGoodWith(sejuani, toDoDescription);
+    taric.addGoodAgainst(leona, toDoDescription);
+    taric.addGoodAgainst(karma, toDoDescription);
+    taric.addGoodAgainst(lulu, toDoDescription);
+    taric.addGoodWith(graves, toDoDescription);
+    taric.addGoodWith(ezreal, toDoDescription);
+    taric.addGoodWith(vayne, toDoDescription);
+    teemo.addGoodAgainst(choGath, toDoDescription);
+    teemo.addGoodAgainst(garen, toDoDescription);
+    teemo.addGoodAgainst(poppy, toDoDescription);
+    teemo.addGoodWith(cassiopeia, toDoDescription);
+    teemo.addGoodWith(leeSin, toDoDescription);
+    teemo.addGoodWith(blitzcrank, toDoDescription);
+    thresh.addGoodAgainst(lux, toDoDescription);
+    thresh.addGoodAgainst(karma, toDoDescription);
+    thresh.addGoodAgainst(veigar, toDoDescription);
+    thresh.addGoodWith(vayne, toDoDescription);
+    thresh.addGoodWith(draven, toDoDescription);
+    thresh.addGoodWith(lucian, toDoDescription);
+    tristana.addGoodAgainst(corki, toDoDescription);
+    tristana.addGoodAgainst(kalista, toDoDescription);
+    tristana.addGoodAgainst(lucian, toDoDescription);
+    tristana.addGoodWith(leona, toDoDescription);
+    tristana.addGoodWith(thresh, toDoDescription);
+    tristana.addGoodWith(alistar, toDoDescription);
+    trundle.addGoodAgainst(garen, toDoDescription);
+    trundle.addGoodAgainst(sion, toDoDescription);
+    trundle.addGoodAgainst(nasus, toDoDescription);
+    trundle.addGoodWith(lissandra, toDoDescription);
+    trundle.addGoodWith(vayne, toDoDescription);
+    trundle.addGoodWith(jarvanIV, toDoDescription);
+    tryndamere.addGoodAgainst(nautilus, toDoDescription);
+    tryndamere.addGoodAgainst(choGath, toDoDescription);
+    tryndamere.addGoodAgainst(garen, toDoDescription);
+    tryndamere.addGoodWith(aatrox, toDoDescription);
+    tryndamere.addGoodWith(ashe, toDoDescription);
+    tryndamere.addGoodWith(zilean, toDoDescription);
+    twistedFate.addGoodAgainst(azir, toDoDescription);
+    twistedFate.addGoodAgainst(akali, toDoDescription);
+    twistedFate.addGoodAgainst(ryze, toDoDescription);
+    twistedFate.addGoodWith(nocturne, toDoDescription);
+    twistedFate.addGoodWith(shen, toDoDescription);
+    twistedFate.addGoodWith(aatrox, toDoDescription);
+    twitch.addGoodAgainst(corki, toDoDescription);
+    twitch.addGoodAgainst(sivir, toDoDescription);
+    twitch.addGoodAgainst(kalista, toDoDescription);
+    twitch.addGoodWith(taric, toDoDescription);
+    twitch.addGoodWith(leona, toDoDescription);
+    twitch.addGoodWith(braum, toDoDescription);
+    udyr.addGoodAgainst(graves, toDoDescription);
+    udyr.addGoodAgainst(leeSin, toDoDescription);
+    udyr.addGoodAgainst(nidalee, toDoDescription);
+    udyr.addGoodWith(ahri, toDoDescription);
+    udyr.addGoodWith(ryze, toDoDescription);
+    udyr.addGoodWith(leBlanc, toDoDescription);
+    urgot.addGoodAgainst(jarvanIV, toDoDescription);
+    urgot.addGoodAgainst(fiora, toDoDescription);
+    urgot.addGoodAgainst(sivir, toDoDescription);
+    urgot.addGoodWith(soraka, toDoDescription);
+    urgot.addGoodWith(taric, toDoDescription);
+    urgot.addGoodWith(janna, toDoDescription);
+    varus.addGoodAgainst(corki, toDoDescription);
+    varus.addGoodAgainst(sivir, toDoDescription);
+    varus.addGoodAgainst(ashe, toDoDescription);
+    varus.addGoodWith(leona, toDoDescription);
+    varus.addGoodWith(thresh, toDoDescription);
+    varus.addGoodWith(nami, toDoDescription);
+    vayne.addGoodAgainst(ziggs, toDoDescription);
+    vayne.addGoodAgainst(sivir, toDoDescription);
+    vayne.addGoodAgainst(jhin, toDoDescription);
+    vayne.addGoodWith(thresh, toDoDescription);
+    vayne.addGoodWith(nunu, toDoDescription);
+    vayne.addGoodWith(nami, toDoDescription);
+    veigar.addGoodAgainst(diana, toDoDescription);
+    veigar.addGoodAgainst(talon, toDoDescription);
+    veigar.addGoodAgainst(akali, toDoDescription);
+    veigar.addGoodWith(leBlanc, toDoDescription);
+    veigar.addGoodWith(warwick, toDoDescription);
+    veigar.addGoodWith(amumu, toDoDescription);
+    velKoz.addGoodAgainst(swain, toDoDescription);
+    velKoz.addGoodAgainst(galio, toDoDescription);
+    velKoz.addGoodAgainst(viktor, toDoDescription);
+    velKoz.addGoodWith(amumu, toDoDescription);
+    velKoz.addGoodWith(aatrox, toDoDescription);
+    velKoz.addGoodWith(leona, toDoDescription);
+    vi.addGoodAgainst(nidalee, toDoDescription);
+    vi.addGoodAgainst(shaco, toDoDescription);
+    vi.addGoodAgainst(elise, toDoDescription);
+    vi.addGoodWith(yasuo, toDoDescription);
+    vi.addGoodWith(caitlyn, toDoDescription);
+    vi.addGoodWith(orianna, toDoDescription);
+    viktor.addGoodAgainst(ryze, toDoDescription);
+    viktor.addGoodAgainst(diana, toDoDescription);
+    viktor.addGoodAgainst(lissandra, toDoDescription);
+    viktor.addGoodWith(jarvanIV, toDoDescription);
+    viktor.addGoodWith(sona, toDoDescription);
+    viktor.addGoodWith(malzahar, toDoDescription);
+    vladimir.addGoodAgainst(ryze, toDoDescription);
+    vladimir.addGoodAgainst(gangplank, toDoDescription);
+    vladimir.addGoodAgainst(yasuo, toDoDescription);
+    vladimir.addGoodWith(swain, toDoDescription);
+    vladimir.addGoodWith(kennen, toDoDescription);
+    vladimir.addGoodWith(zed, toDoDescription);
+    volibear.addGoodAgainst(hecarim, toDoDescription);
+    volibear.addGoodAgainst(leeSin, toDoDescription);
+    volibear.addGoodAgainst(amumu, toDoDescription);
+    volibear.addGoodWith(yasuo, toDoDescription);
+    volibear.addGoodWith(teemo, toDoDescription);
+    volibear.addGoodWith(ashe, toDoDescription);
+    warwick.addGoodAgainst(poppy, toDoDescription);
+    warwick.addGoodAgainst(leeSin, toDoDescription);
+    warwick.addGoodAgainst(skarner, toDoDescription);
+    warwick.addGoodWith(galio, toDoDescription);
+    warwick.addGoodWith(kled, toDoDescription);
+    warwick.addGoodWith(bard, toDoDescription);
+    wukong.addGoodAgainst(gragas, toDoDescription);
+    wukong.addGoodAgainst(trundle, toDoDescription);
+    wukong.addGoodAgainst(jayce, toDoDescription);
+    wukong.addGoodWith(galio, toDoDescription);
+    wukong.addGoodWith(bard, toDoDescription);
+    wukong.addGoodWith(sion, toDoDescription);
+    xayah.addGoodAgainst(corki, toDoDescription);
+    xayah.addGoodAgainst(lucian, toDoDescription);
+    xayah.addGoodAgainst(kalista, toDoDescription);
+    xayah.addGoodWith(rakan, toDoDescription);
+    xayah.addGoodWith(sona, toDoDescription);
+    xayah.addGoodWith(galio, toDoDescription);
+    xerath.addGoodAgainst(azir, toDoDescription);
+    xerath.addGoodAgainst(lissandra, toDoDescription);
+    xerath.addGoodAgainst(viktor, toDoDescription);
+    xerath.addGoodWith(jarvanIV, toDoDescription);
+    xerath.addGoodWith(quinn, toDoDescription);
+    xerath.addGoodWith(varus, toDoDescription);
+    xinZhao.addGoodAgainst(rengar, toDoDescription);
+    xinZhao.addGoodAgainst(olaf, toDoDescription);
+    xinZhao.addGoodAgainst(nocturne, toDoDescription);
+    xinZhao.addGoodWith(yasuo, toDoDescription);
+    xinZhao.addGoodWith(pantheon, toDoDescription);
+    xinZhao.addGoodWith(blitzcrank, toDoDescription);
+    yasuo.addGoodAgainst(drMundo, toDoDescription);
+    yasuo.addGoodAgainst(yorick, toDoDescription);
+    yasuo.addGoodAgainst(galio, toDoDescription);
+    yasuo.addGoodWith(malphite, toDoDescription);
+    yasuo.addGoodWith(wukong, toDoDescription);
+    yasuo.addGoodWith(alistar, toDoDescription);
+    yorick.addGoodAgainst(nasus, toDoDescription);
+    yorick.addGoodAgainst(kennen, toDoDescription);
+    yorick.addGoodAgainst(vladimir, toDoDescription);
+    yorick.addGoodWith(mordekaiser, toDoDescription);
+    yorick.addGoodWith(vayne, toDoDescription);
+    yorick.addGoodWith(cassiopeia, toDoDescription);
+    yuumi.addGoodAgainst(lux, toDoDescription);
+    yuumi.addGoodAgainst(annie, toDoDescription);
+    yuumi.addGoodAgainst(ezreal, toDoDescription);
+    yuumi.addGoodWith(vayne, toDoDescription);
+    yuumi.addGoodWith(caitlyn, toDoDescription);
+    yuumi.addGoodWith(jinx, toDoDescription);
+    zac.addGoodAgainst(wukong, toDoDescription);
+    zac.addGoodAgainst(trundle, toDoDescription);
+    zac.addGoodAgainst(skarner, toDoDescription);
+    zac.addGoodWith(yasuo, toDoDescription);
+    zac.addGoodWith(orianna, toDoDescription);
+    zac.addGoodWith(syndra, toDoDescription);
+    zed.addGoodAgainst(ryze, toDoDescription);
+    zed.addGoodAgainst(azir, toDoDescription);
+    zed.addGoodAgainst(taliyah, toDoDescription);
+    zed.addGoodWith(talon, toDoDescription);
+    zed.addGoodWith(vi, toDoDescription);
+    zed.addGoodWith(nasus, toDoDescription);
+    ziggs.addGoodAgainst(aurelionSol, toDoDescription);
+    ziggs.addGoodAgainst(gangplank, toDoDescription);
+    ziggs.addGoodAgainst(cassiopeia, toDoDescription);
+    ziggs.addGoodWith(amumu, toDoDescription);
+    ziggs.addGoodWith(jarvanIV, toDoDescription);
+    ziggs.addGoodWith(kennen, toDoDescription);
+    zilean.addGoodAgainst(braum, toDoDescription);
+    zilean.addGoodAgainst(alistar, toDoDescription);
+    zilean.addGoodAgainst(zyra, toDoDescription);
+    zilean.addGoodWith(aatrox, toDoDescription);
+    zilean.addGoodWith(syndra, toDoDescription);
+    zilean.addGoodWith(hecarim, toDoDescription);
+    zoe.addGoodAgainst(azir, toDoDescription);
+    zoe.addGoodAgainst(orianna, toDoDescription);
+    zoe.addGoodAgainst(ryze, toDoDescription);
+    zoe.addGoodWith(thresh, toDoDescription);
+    zoe.addGoodWith(bard, toDoDescription);
+    zoe.addGoodWith(zilean, toDoDescription);
+    zyra.addGoodAgainst(lux, toDoDescription);
+    zyra.addGoodAgainst(bard, toDoDescription);
+    zyra.addGoodAgainst(annie, toDoDescription);
+    zyra.addGoodWith(ashe, toDoDescription);
+    zyra.addGoodWith(yasuo, toDoDescription);
+    zyra.addGoodWith(amumu, toDoDescription);
 })();
