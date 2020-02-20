@@ -1,0 +1,19 @@
+[
+    {
+        "name": "Aatrox",
+        "goodWith": [
+            {
+                "name": "Annie",
+                "title": "Killer Bruh",
+                "details": "Killer bruh is killer, man!"
+            }
+        ],
+        "goodAgainst": [
+            {
+                "name": "Ahri",
+                "title": "Killer Bruh?",
+                "details": "Maybe Killer bruh ain't so killer?"
+            }
+        ]
+    }
+]

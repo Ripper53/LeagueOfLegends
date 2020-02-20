@@ -17,9 +17,43 @@ var Role;
     Role[Role["All"] = 31] = "All";
 })(Role || (Role = {}));
 ;
+var Civilization;
+(function (Civilization) {
+    Civilization[Civilization["Zero"] = 0] = "Zero";
+    Civilization[Civilization["Nature"] = 1] = "Nature";
+    Civilization[Civilization["Water"] = 2] = "Water";
+    Civilization[Civilization["Fire"] = 4] = "Fire";
+    Civilization[Civilization["Light"] = 8] = "Light";
+    Civilization[Civilization["Darkness"] = 16] = "Darkness";
+    Civilization[Civilization["All"] = 31] = "All";
+})(Civilization || (Civilization = {}));
+;
+var Mode;
+(function (Mode) {
+    Mode[Mode["None"] = 0] = "None";
+    Mode[Mode["Tank"] = 1] = "Tank";
+    Mode[Mode["ADC"] = 2] = "ADC";
+    Mode[Mode["APC"] = 4] = "APC";
+    Mode[Mode["Utility"] = 8] = "Utility";
+    Mode[Mode["PowerEngager"] = 16] = "PowerEngager";
+    Mode[Mode["PowerRetorter"] = 32] = "PowerRetorter";
+    Mode[Mode["Slayer"] = 64] = "Slayer";
+    Mode[Mode["Burster"] = 128] = "Burster";
+    Mode[Mode["Scaler"] = 256] = "Scaler";
+    Mode[Mode["Binder"] = 512] = "Binder";
+    Mode[Mode["SplitPusher"] = 1024] = "SplitPusher";
+    Mode[Mode["EpicKiller"] = 2048] = "EpicKiller";
+    Mode[Mode["Sly"] = 4096] = "Sly";
+    Mode[Mode["All"] = 8191] = "All";
+})(Mode || (Mode = {}));
+;
 class Champion {
     constructor(name, src) {
+        this.tier = 0;
         this.role = Role.None;
+        this.civilization = Civilization.Zero;
+        this.mode = Mode.None;
+        this.available = true;
         this.goodAgainst = [];
         this.badAgainst = [];
         this.goodWith = [];
@@ -53,6 +87,12 @@ class Champion {
     }
     addGoodWith(champion, description, score = 1) {
         this.addChampionInfo(this.goodWith, champion.goodWith, champion, description, new ChampionInfo(champion, "Good with " + champion.name, description, score), new ChampionInfo(this, "Good with " + this.name, description, score));
+    }
+    clear() {
+        this.goodAgainst.length = 0;
+        this.goodWith.length = 0;
+        this.badAgainst.length = 0;
+        this.badAgainst.length = 0;
     }
 }
 Champion.ALL = [];
@@ -179,12 +219,24 @@ class ButtonUI extends BoxUI {
         super();
         this.color = "black";
         this.hoverColor = "blue";
-        this.modifyStyle.width = w;
-        this.modifyStyle.height = h;
+        const width = w + "px", height = h + "px";
+        this.modifyStyle.width = width;
+        this.modifyStyle.height = height;
         this.modifyStyle.cursor = "pointer";
         this.modifyElement.setAttribute('class', 'button');
-        this.text = new TextUI(text);
+        this.text = new TextUI("");
         this.modifyElement.appendChild(this.text.modifyElement);
+        this.text.modifyStyle.width = width;
+        this.text.modifyStyle.height = height;
+        this.text.modifyStyle.userSelect = "none";
+        this.text.modifyStyle.textAlign = "center";
+        const centerSpan = document.createElement('span');
+        this.text.modifyElement.appendChild(centerSpan);
+        centerSpan.style.display = "inline-block";
+        centerSpan.style.verticalAlign = "middle";
+        centerSpan.style.lineHeight = "normal";
+        centerSpan.style.height = height;
+        centerSpan.textContent = text;
         this.onLeaveEvent = ButtonUI.setButtonEvents(this);
     }
     get modifyText() {
@@ -204,14 +256,14 @@ class ButtonUI extends BoxUI {
         this.hoverColor = hoverColor;
     }
     static setEvents(btn, setColorFunc) {
-        btn.modifyEvents.addOnPointerEnter(e => {
+        btn.modifyEvents.addOnPointerEnter(() => {
             setColorFunc(btn.modifyStyle, btn.getHoverColor());
         });
         const onLeaveEvent = () => {
             setColorFunc(btn.modifyStyle, btn.getColor());
         };
         onLeaveEvent();
-        btn.modifyEvents.addOnPointerLeave(e => onLeaveEvent());
+        btn.modifyEvents.addOnPointerLeave(() => onLeaveEvent());
         return onLeaveEvent;
     }
     static setButtonEvents(btn) {
@@ -261,13 +313,24 @@ function getTextUI(textContent = "", border = 1, hexColor = "#000000") {
     text.modifyStyle.textShadow = `${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px`;
     return text;
 }
+const EnumUtility = {
+    hasFlag: (value, check) => (value & check) === value
+};
+const FileUtility = {
+    getName: path => path.replace(/^.*[\\\/]/, '')
+};
 class PopUpInfo extends UIElement {
     constructor() {
         super(document.createElement('div'));
+        this.width = 400;
+        this.readOnly = false;
+        const width = this.width + "px";
         this.modifyStyle.backgroundColor = "black";
         this.modifyStyle.zIndex = "100";
         this.modifyStyle.display = "none";
         this.modifyStyle.position = "fixed";
+        this.modifyStyle.minWidth = width;
+        this.modifyStyle.padding = "5px";
         this.modifyEvents.addOnPointerLeave(() => this.hide());
         this.image = new ImageUI();
         this.modifyElement.appendChild(this.image.modifyElement);
@@ -282,45 +345,64 @@ class PopUpInfo extends UIElement {
         this.nameText.modifyStyle.display = "inline-block";
         this.nameText.modifyStyle.position = "relative";
         this.nameText.modifyStyle.top = "-75px";
+        this.addInfoButton = new ButtonUI("Add", 100, 30);
+        this.modifyElement.appendChild(this.addInfoButton.modifyElement);
+        this.addInfoButton.setColor("#1f1f1f");
+        this.addInfoButton.setHoverColor("#404040");
+        this.addInfoButton.modifyStyle.opacity = "50%";
+        this.addInfoButton.modifyText.modifyStyle.color = "white";
+        this.addInfoButton.modifyText.modifyStyle.fontFamily = defaultValue.fontFamily;
+        this.addInfoButton.modifyStyle.position = "absolute";
+        this.addInfoButton.modifyStyle.top = "0px";
+        this.addInfoButton.modifyStyle.right = "0px";
         this.descriptionText = new TextUI("");
         this.modifyElement.appendChild(this.descriptionText.modifyElement);
         this.descriptionText.modifyStyle.color = "white";
         this.descriptionText.modifyStyle.margin = "5px";
         this.descriptionText.modifyStyle.fontFamily = defaultValue.fontFamily;
-        this.descriptionText.modifyStyle.maxWidth = "400px";
+        this.descriptionText.modifyStyle.width = width;
+        this.descriptionText.modifyStyle.maxWidth = this.width + "px";
         this.descriptionText.modifyStyle.maxHeight = "400px";
         this.descriptionText.modifyStyle.overflowY = "auto";
+        this.descriptionText.modifyStyle.overflowX = "hidden";
         this.descriptionText.modifyStyle.wordWrap = "break-word";
+    }
+    addInfo(title, infos, color) {
+        const paragraph = document.createElement('p');
+        this.descriptionText.modifyElement.appendChild(paragraph);
+        for (let info of infos) {
+            const strongTitle = document.createElement('strong');
+            paragraph.appendChild(strongTitle);
+            strongTitle.textContent = title + info.champion.name;
+            strongTitle.style.color = color;
+            const img = document.createElement('img');
+            paragraph.appendChild(img);
+            img.style.width = "25px";
+            img.style.height = "25px";
+            img.src = info.champion.getImageSrcPath();
+            const descriptionParagraph = document.createElement('textarea');
+            paragraph.appendChild(descriptionParagraph);
+            descriptionParagraph.style.display = "block";
+            descriptionParagraph.textContent += info.description;
+            descriptionParagraph.style.width = (this.width - 50) + "px";
+            descriptionParagraph.style.height = "100px";
+            descriptionParagraph.readOnly = this.readOnly;
+            descriptionParagraph.addEventListener('input', () => {
+                info.description = descriptionParagraph.value;
+            });
+        }
     }
     display(ui) {
         clearChildren(this.descriptionText.modifyElement);
-        const champion = ui.get();
+        const champion = ui.getChampion();
         if (champion !== null) {
             this.image.modifyElement.src = getImagePath(champion.src);
             this.nameText.modifyElement.textContent = champion.name;
             this.image.modifyElement.alt = champion.name;
-            const description = (infos, color) => {
-                const paragraph = document.createElement('p');
-                this.descriptionText.modifyElement.appendChild(paragraph);
-                for (let info of infos) {
-                    const strongTitle = document.createElement('strong');
-                    paragraph.appendChild(strongTitle);
-                    strongTitle.textContent = info.title;
-                    strongTitle.style.color = color;
-                    const img = document.createElement('img');
-                    paragraph.appendChild(img);
-                    img.style.width = "25px";
-                    img.style.height = "25px";
-                    img.src = getImagePath(info.champion.name + "Icon.png");
-                    const descriptionParagraph = document.createElement('p');
-                    paragraph.appendChild(descriptionParagraph);
-                    descriptionParagraph.textContent += info.description;
-                }
-            };
-            description(champion.goodAgainst, "#ff0000");
-            description(champion.badAgainst, "#ff0000");
-            description(champion.goodWith, "#00ff00");
-            description(champion.badWith, "#00ff00");
+            this.addInfo("Good against ", champion.goodAgainst, "#ff0000");
+            this.addInfo("Bad against ", champion.badAgainst, "#ff0000");
+            this.addInfo("Good with ", champion.goodWith, "#00ff00");
+            this.addInfo("Bad with ", champion.badWith, "#00ff00");
         }
         else {
             this.image.modifyElement.src = getImagePath(ui.src);
@@ -335,7 +417,7 @@ class PopUpInfo extends UIElement {
         this.modifyStyle.display = "none";
     }
 }
-class ChampionUI extends UIElement {
+class ChampionSelectUI extends UIElement {
     constructor(src, w, h) {
         super(document.createElement('div'));
         this.champion = null;
@@ -351,15 +433,15 @@ class ChampionUI extends UIElement {
         this.imageButton.modifyEvents.addOnPointerDown(e => {
             if (e.button !== 2)
                 return;
-            ChampionUI.popUp.display(this);
+            ChampionSelectUI.popUp.display(this);
             let x = e.clientX, y = e.clientY;
-            const w = ChampionUI.popUp.modifyElement.clientWidth, h = ChampionUI.popUp.modifyElement.clientHeight;
+            const w = ChampionSelectUI.popUp.modifyElement.clientWidth, h = ChampionSelectUI.popUp.modifyElement.clientHeight;
             if ((x + w) > window.innerWidth)
                 x += window.innerWidth - (x + w);
             if ((y + h) > window.innerHeight)
                 y += window.innerHeight - (y + h);
-            ChampionUI.popUp.modifyStyle.left = x + "px";
-            ChampionUI.popUp.modifyStyle.top = y + "px";
+            ChampionSelectUI.popUp.modifyStyle.left = x + "px";
+            ChampionSelectUI.popUp.modifyStyle.top = y + "px";
         });
         this.text = getTextUI();
         this.modifyElement.appendChild(this.text.modifyElement);
@@ -413,29 +495,12 @@ class ChampionUI extends UIElement {
         this.hoverImage.modifyStyle.width = width;
         this.hoverImage.modifyStyle.height = height;
     }
-    set(champion) {
-        this.champion = champion;
-        if (this.champion !== null) {
-            this.imageButton.modifyElement.src = this.champion.getImageSrcPath();
-            this.imageButton.modifyElement.alt = this.champion.name;
-            this.text.modifyElement.textContent = this.champion.name;
-        }
-        else {
-            this.imageButton.modifyElement.src = getImagePath(this.src);
-            this.imageButton.modifyElement.alt = "No champion.";
-            this.text.modifyElement.textContent = "";
-        }
-    }
-    get() {
+    getChampion() {
         return this.champion;
     }
     reset() {
-        this.imageButton.modifyStyle.filter = "grayscale(0%)";
         this.synergyText.modifyElement.textContent = "";
         this.counterText.modifyElement.textContent = "";
-    }
-    ban() {
-        this.imageButton.modifyStyle.filter = "grayscale(100%)";
     }
     getSynergyScore() {
         if (this.synergyScore === null)
@@ -450,7 +515,7 @@ class ChampionUI extends UIElement {
     evaluateChamps(team, infos) {
         const champScore = new ChampionScore();
         for (let ui of team) {
-            const champ = ui.champion;
+            const champ = ui.getChampion();
             if (champ === null)
                 continue;
             const infoIndex = infos.findIndex(v => v.champion === champ);
@@ -466,32 +531,115 @@ class ChampionUI extends UIElement {
         return champScore;
     }
     evaluatePick(friendlyTeam, enemyTeam) {
-        if (this.champion === null) {
+        const champion = this.getChampion();
+        if (champion === null) {
             this.synergyText.modifyElement.textContent = "";
             this.counterText.modifyElement.textContent = "";
             return;
         }
-        this.synergyScore = this.evaluateChamps(friendlyTeam, this.champion.goodWith);
+        this.synergyScore = this.evaluateChamps(friendlyTeam, champion.goodWith);
         this.synergyText.modifyElement.textContent = this.synergyScore.score.toString();
-        this.counterScore = this.evaluateChamps(enemyTeam, this.champion.goodAgainst);
+        this.counterScore = this.evaluateChamps(enemyTeam, champion.goodAgainst);
         this.counterText.modifyElement.textContent = this.counterScore.score.toString();
     }
     evaluateBan(friendlyTeam, enemyTeam) {
-        if (this.champion === null) {
+        const champion = this.getChampion();
+        if (champion === null) {
             this.synergyText.modifyElement.textContent = "";
             this.counterText.modifyElement.textContent = "";
             return;
         }
-        this.synergyScore = this.evaluateChamps(enemyTeam, this.champion.goodWith);
+        this.synergyScore = this.evaluateChamps(enemyTeam, champion.goodWith);
         this.synergyText.modifyElement.textContent = this.synergyScore.score.toString();
-        this.counterScore = this.evaluateChamps(friendlyTeam, this.champion.goodAgainst);
+        this.counterScore = this.evaluateChamps(friendlyTeam, champion.goodAgainst);
         this.counterText.modifyElement.textContent = this.counterScore.score.toString();
     }
 }
-ChampionUI.popUp = new PopUpInfo();
-function getChampionUI(fileName, w, h) {
-    const imageBtn = new ChampionUI(fileName, w, h);
-    return imageBtn;
+ChampionSelectUI.popUp = new PopUpInfo();
+class ChampionSelectSetUI extends ChampionSelectUI {
+    constructor() {
+        super(...arguments);
+        this.value = null;
+        this.onSetEvents = [];
+    }
+    addOnSet(func) {
+        this.onSetEvents.push(func);
+    }
+    removeOnSet(func) {
+        const index = this.onSetEvents.findIndex(v => v === func);
+        if (index !== -1)
+            this.onSetEvents.splice(index, 1);
+    }
+    triggerOnSet(oldValue) {
+        for (let func of this.onSetEvents)
+            func(this, this.value, oldValue);
+    }
+    set(value) {
+        const oldValue = this.value;
+        this.value = value;
+        const champion = this.getChampionValue();
+        if (champion !== null) {
+            this.champion = champion;
+            this.imageButton.modifyElement.src = champion.getImageSrcPath();
+            this.imageButton.modifyElement.alt = champion.name;
+            this.text.modifyElement.textContent = champion.name;
+            this.triggerOnSet(oldValue);
+            return true;
+        }
+        this.value = null;
+        this.champion = null;
+        this.imageButton.modifyElement.src = getImagePath(this.src);
+        this.imageButton.modifyElement.alt = "No champion.";
+        this.text.modifyElement.textContent = "";
+        this.triggerOnSet(oldValue);
+        return false;
+    }
+}
+class ChampionUI extends ChampionSelectSetUI {
+    constructor(src, w, h) {
+        super(src, w, h);
+        this.blueSideSelectedImage = ChampionUI.getSideSelectedImage("BlueFadeOut.png", w, h);
+        this.modifyElement.appendChild(this.blueSideSelectedImage.modifyElement);
+        this.redSideSelectedImage = ChampionUI.getSideSelectedImage("RedFadeOut.png", w, h);
+        this.modifyElement.appendChild(this.redSideSelectedImage.modifyElement);
+    }
+    static getSideSelectedImage(src, w, h) {
+        const sideImage = new ImageUI();
+        sideImage.modifyElement.src = getImagePath(src);
+        sideImage.modifyStyle.width = w + "px";
+        sideImage.modifyStyle.height = h + "px";
+        sideImage.modifyStyle.transform = "rotate(270deg)";
+        sideImage.modifyStyle.position = "absolute";
+        sideImage.modifyStyle.visibility = "hidden";
+        sideImage.modifyStyle.opacity = "75%";
+        sideImage.modifyStyle.pointerEvents = "none";
+        return sideImage;
+    }
+    getChampionValue() {
+        return this.value;
+    }
+    reset() {
+        super.reset();
+        this.value.available = true;
+        this.imageButton.modifyStyle.filter = "grayscale(0%)";
+        this.blueSideSelectedImage.modifyStyle.visibility = "hidden";
+        this.redSideSelectedImage.modifyStyle.visibility = "hidden";
+    }
+    ban() {
+        this.value.available = false;
+        this.imageButton.modifyStyle.filter = "grayscale(100%)";
+    }
+    pick() {
+        this.value.available = false;
+    }
+    bluePick() {
+        this.pick();
+        this.blueSideSelectedImage.modifyStyle.visibility = "visible";
+    }
+    redPick() {
+        this.pick();
+        this.redSideSelectedImage.modifyStyle.visibility = "visible";
+    }
 }
 class LayoutUI extends UIElement {
     constructor() {
@@ -534,6 +682,23 @@ class HorizontalLayoutUI extends LayoutUI {
         ui.modifyStyle.display = "inline-block";
     }
 }
+class SideUI extends ChampionSelectSetUI {
+    constructor(src, w, h, side) {
+        super(src, w, h);
+        this.side = side;
+    }
+    getChampionValue() {
+        if (this.value === null)
+            return null;
+        const champ = this.value.getChampion();
+        return (champ !== null && champ.available) ? champ : null;
+    }
+    reset() {
+        super.reset();
+        this.set(null);
+        this.imageButton.modifyElement.src = getImagePath(this.src);
+    }
+}
 class SideLayoutUI extends VerticalLayoutUI {
     constructor(banSrc, pickSrc) {
         super();
@@ -550,7 +715,7 @@ class SideLayoutUI extends VerticalLayoutUI {
             this.banLayout.add(img);
         this.pickSrc = pickSrc;
         this.picks = [
-            this.getSideImage(), this.getSideImage(), this.getSideImage(), this.getSideImage(), this.getSideImage()
+            this.getPickImage(), this.getPickImage(), this.getPickImage(), this.getPickImage(), this.getPickImage()
         ];
         for (let img of this.picks)
             this.add(img);
@@ -559,7 +724,7 @@ class SideLayoutUI extends VerticalLayoutUI {
         for (let ui of this.picks) {
             func(ui);
         }
-        for (let ui of championUIs) {
+        for (let ui of ChampionData.UIs) {
             func(ui);
         }
     }
@@ -570,17 +735,28 @@ class SideLayoutUI extends VerticalLayoutUI {
         this.evaluate(ui => ui.evaluateBan(this.picks, this.enemySide.picks));
     }
     getBanImage() {
-        const ui = getChampionUI(this.banSrc, 50, 50);
+        const ui = new SideUI(this.banSrc, 50, 50, this);
         ui.imageButton.modifyStyle.opacity = defaultValue.opacity + "%";
         ui.text.modifyStyle.position = "absolute";
         ui.synergyText.modifyStyle.top = "25%";
         ui.counterText.modifyStyle.top = "25%";
         SideLayoutUI.pickableUI(ui);
-        ui.imageButton.modifyEvents.addOnClick(() => evaluateBans(this, this.enemySide));
+        ui.imageButton.modifyEvents.addOnClick(() => {
+            if (ui.side === Side.blue)
+                evaluateBans(ui.side, Side.red);
+            else
+                evaluateBans(ui.side, Side.blue);
+        });
+        ui.addOnSet((source, champ, oldChamp) => {
+            if (champ === null)
+                return;
+            champ.ban();
+            evaluateBans(this, this.enemySide);
+        });
         return ui;
     }
-    getSideImage() {
-        const ui = getChampionUI(this.pickSrc, 75, 75);
+    getPickImage() {
+        const ui = new SideUI(this.pickSrc, 75, 75, this);
         ui.imageButton.modifyStyle.opacity = defaultValue.opacity + "%";
         ui.imageButton.modifyStyle.borderRadius = "50%";
         ui.text.modifyStyle.display = "inline-block";
@@ -592,10 +768,29 @@ class SideLayoutUI extends VerticalLayoutUI {
         ui.hoverImage.modifyStyle.transform = "rotate(0deg)";
         ui.hoverImage.modifyStyle.borderRadius = "37.5px 0px 0px 37.5px";
         SideLayoutUI.pickableUI(ui);
-        ui.imageButton.modifyEvents.addOnClick(() => evaluatePicks(this, this.enemySide));
+        ui.imageButton.modifyEvents.addOnClick(() => {
+            if (ui.side === Side.blue)
+                evaluatePicks(ui.side, Side.red);
+            else
+                evaluatePicks(ui.side, Side.blue);
+        });
+        ui.addOnSet((source, champ, oldChamp) => {
+            if (champ === null)
+                return;
+            if (this === Side.blue)
+                champ.bluePick();
+            else
+                champ.redPick();
+            evaluatePicks(this, this.enemySide);
+        });
         return ui;
     }
+    static resetOldChampEvent(source, value, oldValue) {
+        if (oldValue !== null)
+            oldValue.reset();
+    }
     static pickableUI(ui) {
+        ui.addOnSet(SideLayoutUI.resetOldChampEvent);
         ui.imageButton.modifyEvents.addOnClick(() => {
             pick.setEvent = null;
             pick.setChampionEvent = null;
@@ -604,39 +799,60 @@ class SideLayoutUI extends VerticalLayoutUI {
         });
     }
 }
-const championUIs = [];
-let sort = null;
+const ChampionData = {
+    UIs: [],
+    clear: () => {
+        for (let champion of Champion.ALL)
+            champion.clear();
+    },
+    load: data => {
+        for (let d of data) {
+            const champ = Champion.get(d.name);
+            for (let ga of d.goodAgainst) {
+                champ.addGoodAgainst(Champion.get(ga.name), ga.details, ga.score);
+            }
+            for (let gw of d.goodWith) {
+                champ.addGoodWith(Champion.get(gw.name), gw.details, gw.score);
+            }
+        }
+    }
+};
+const ChampionFilter = {
+    sort: null
+};
 function evaluatePicks(friendlyTeam, enemyTeam) {
     friendlyTeam.evaluatePicks();
     enemyTeam.evaluatePicks();
-    for (let ui of championUIs)
+    for (let ui of ChampionData.UIs)
         ui.evaluatePick(friendlyTeam.picks, enemyTeam.picks);
-    if (sort !== null)
-        sort();
+    if (ChampionFilter.sort !== null)
+        ChampionFilter.sort();
 }
 function evaluateBans(friendlyTeam, enemyTeam) {
     friendlyTeam.evaluateBans();
     enemyTeam.evaluateBans();
-    for (let ui of championUIs)
+    for (let ui of ChampionData.UIs)
         ui.evaluateBan(friendlyTeam.picks, enemyTeam.picks);
-    if (sort !== null)
-        sort();
+    if (ChampionFilter.sort !== null)
+        ChampionFilter.sort();
 }
-const sideWidth = 200;
-const blueSide = new SideLayoutUI("BanBanner.png", "BlueBanner.png");
-blueSide.modifyStyle.width = sideWidth + "px";
-blueSide.modifyStyle.float = "left";
-const redSide = new SideLayoutUI("BanBanner.png", "RedBanner.png");
-redSide.modifyStyle.width = sideWidth + "px";
-redSide.modifyStyle.float = "right";
-redSide.modifyStyle.direction = "rtl";
-for (let ui of redSide.picks) {
+const Side = {
+    blue: new SideLayoutUI("BanBanner.png", "BlueBanner.png"),
+    red: new SideLayoutUI("BanBanner.png", "RedBanner.png"),
+    width: 200
+};
+Side.blue.modifyStyle.width = Side.width + "px";
+Side.blue.modifyStyle.float = "left";
+Side.red.modifyStyle.width = Side.width + "px";
+Side.red.modifyStyle.float = "right";
+Side.red.modifyStyle.direction = "rtl";
+for (let ui of Side.red.picks) {
     ui.hoverImage.modifyStyle.transform = "rotate(180deg)";
     ui.text.modifyStyle.textAlign = "right";
     ui.text.modifyStyle.left = "-10px";
 }
-blueSide.enemySide = redSide;
-redSide.enemySide = blueSide;
+Side.blue.enemySide = Side.red;
+Side.red.enemySide = Side.blue;
 const pick = new (class Pick {
     constructor() {
         this.ui = null;
@@ -646,7 +862,7 @@ const pick = new (class Pick {
     set(ui) {
         if (this.ui !== null) {
             this.ui.text.modifyStyle.color = "white";
-            if (this.ui.get() === null) {
+            if (FileUtility.getName(this.ui.imageButton.modifyElement.src) === this.ui.src) {
                 this.ui.imageButton.modifyStyle.opacity = "50%";
             }
         }
@@ -666,11 +882,10 @@ const pick = new (class Pick {
         return this.ui;
     }
     setChampion(ui) {
-        if (this.ui === null)
+        if (this.ui === null || !this.ui.set(ui))
             return;
-        this.ui.set(ui.get());
-        if (sort !== null)
-            sort();
+        if (ChampionFilter.sort !== null)
+            ChampionFilter.sort();
         if (this.setChampionEvent !== null)
             this.setChampionEvent(ui);
     }
@@ -715,6 +930,10 @@ class InputFieldUI extends UIElement {
         super(document.createElement('input'));
     }
 }
+const Random = {
+    getRandomArbitrary: (min, max) => Math.random() * (max - min) + min,
+    getRandomInt: (min, max) => Math.floor(Math.random() * max) + min
+};
 const headerText = getTextUI("Champion Select", 4);
 headerText.modifyStyle.textAlign = "center";
 headerText.modifyStyle.fontSize = "32px";
@@ -729,10 +948,6 @@ headerText.modifyStyle.cursor = "default";
     UI.body.appendChild(bg);
     bg.style.zIndex = "-100";
     bg.style.position = "fixed";
-    bg.style.minWidth = "150%";
-    bg.style.minHeight = "150%";
-    bg.style.top = "-50%";
-    bg.style.left = "-50%";
     bg.controls = false;
     bg.loop = true;
     bg.muted = true;
@@ -740,7 +955,24 @@ headerText.modifyStyle.cursor = "default";
     const bgSource = document.createElement('source');
     bg.appendChild(bgSource);
     bgSource.type = "video/webm";
-    bgSource.src = getImagePath("Zaun.webm");
+    (() => {
+        class Background {
+            constructor(src, width, height) {
+                this.src = src;
+                this.width = width;
+                this.height = height;
+            }
+        }
+        const backgrounds = [
+            new Background("Ionia.webm", 10, 30),
+        ];
+        const selectedBG = backgrounds[Random.getRandomInt(0, backgrounds.length)];
+        bgSource.src = getImagePath(selectedBG.src);
+        bg.style.minWidth = (100 + selectedBG.width) + "%";
+        bg.style.minHeight = (100 + selectedBG.height) + "%";
+        bg.style.left = -selectedBG.width + "%";
+        bg.style.top = -selectedBG.height + "%";
+    })();
     const champSelectDiv = document.createElement('div');
     UI.body.appendChild(champSelectDiv);
     champSelectDiv.style.position = "relative";
@@ -815,7 +1047,7 @@ headerText.modifyStyle.cursor = "default";
         const width = UI.body.clientWidth;
         const gw = gridWidth * (width / 200);
         grid.modifyStyle.width = gw + "px";
-        champSelectDiv.style.left = UI.getPercentage((width / 2) + (gw / 2) + sideWidth, width) + "%";
+        champSelectDiv.style.left = UI.getPercentage((width / 2) + (gw / 2) + Side.width, width) + "%";
     });
     const championNames = [
         "Aatrox",
@@ -969,58 +1201,43 @@ headerText.modifyStyle.cursor = "default";
     ];
     for (let name of championNames) {
         const src = name + "Icon.png";
-        const ui = getChampionUI(src, 75, 75);
-        championUIs.push(ui);
+        const ui = new ChampionUI(src, 75, 75);
+        ChampionData.UIs.push(ui);
         const champion = new Champion(name, src);
         ui.set(champion);
         ui.imageButton.modifyEvents.addOnClick(() => pick.setChampion(ui));
         grid.add(ui);
     }
-    searchInputField.modifyEvents.addOnInput(() => {
-        const name = searchInputField.modifyElement.value.toLowerCase();
-        for (let ui of championUIs) {
-            if (ui.get().name.toLowerCase().startsWith(name))
-                ui.modifyStyle.display = "inline-grid";
-            else
-                ui.modifyStyle.display = "none";
+    const visibleData = {
+        name: "",
+        role: Role.All,
+        civilization: Civilization.All,
+        mode: Mode.All,
+        check: () => {
+            for (let ui of ChampionData.UIs) {
+                const champion = ui.getChampion();
+                ui.modifyStyle.display = (champion.name.toLowerCase().startsWith(visibleData.name) &&
+                    EnumUtility.hasFlag(champion.role, visibleData.role) &&
+                    EnumUtility.hasFlag(champion.civilization, visibleData.civilization) &&
+                    EnumUtility.hasFlag(champion.mode, visibleData.mode)) ? "inline-grid" : "none";
+            }
         }
+    };
+    searchInputField.modifyEvents.addOnInput(() => {
+        visibleData.name = searchInputField.modifyElement.value.toLowerCase();
+        visibleData.check();
     });
     roleDropdown.addEventListener('change', () => {
-        let role;
-        const roleFunc = (champion) => (champion.role & role) === role;
-        switch (roleDropdown.selectedIndex) {
-            case 1:
-                role = Role.Top;
-                break;
-            case 2:
-                role = Role.Middle;
-                break;
-            case 3:
-                role = Role.Bottom;
-                break;
-            case 4:
-                role = Role.Support;
-                break;
-            case 5:
-                role = Role.Jungle;
-                break;
-            default:
-                role = Role.None;
-        }
-        for (let ui of championUIs) {
-            if (roleFunc(ui.get()))
-                ui.modifyStyle.display = "inline-block";
-            else
-                ui.modifyStyle.display = "none";
-        }
+        visibleData.role = (roleDropdown.selectedIndex === 0) ? Role.All : roleDropdown.selectedIndex;
+        visibleData.check();
     });
     sortDropdown.addEventListener('change', () => {
         switch (sortDropdown.selectedIndex) {
             case 0:
-                sort = () => {
-                    sort = null;
-                    championUIs.sort((a, b) => {
-                        const nameA = a.get().name.toLowerCase(), nameB = b.get().name.toLowerCase();
+                ChampionFilter.sort = () => {
+                    ChampionFilter.sort = null;
+                    ChampionData.UIs.sort((a, b) => {
+                        const nameA = a.getChampion().name.toLowerCase(), nameB = b.getChampion().name.toLowerCase();
                         if (nameA > nameB)
                             return 1;
                         else if (nameA < nameB)
@@ -1031,40 +1248,34 @@ headerText.modifyStyle.cursor = "default";
                 };
                 break;
             case 1:
-                sort = () => {
-                    championUIs.sort((a, b) => {
-                        const synergyA = a.getSynergyScore(), synergyB = b.getSynergyScore();
-                        if (synergyA > synergyB)
-                            return -1;
-                        else if (synergyA < synergyB)
-                            return 1;
-                        else
-                            return 0;
+                ChampionFilter.sort = () => {
+                    ChampionData.UIs.sort((a, b) => {
+                        const diff = b.getSynergyScore() - a.getSynergyScore();
+                        if (diff === 0)
+                            return b.getCounterScore() - a.getCounterScore();
+                        return diff;
                     });
                 };
                 break;
             default:
-                sort = () => {
-                    championUIs.sort((a, b) => {
-                        const counterA = a.getCounterScore(), counterB = b.getCounterScore();
-                        if (counterA > counterB)
-                            return -1;
-                        else if (counterA < counterB)
-                            return 1;
-                        else
-                            return 0;
+                ChampionFilter.sort = () => {
+                    ChampionData.UIs.sort((a, b) => {
+                        const diff = b.getCounterScore() - a.getCounterScore();
+                        if (diff === 0)
+                            return b.getSynergyScore() - a.getSynergyScore();
+                        return diff;
                     });
                 };
                 break;
         }
-        const sortChampUIArray = sort;
-        sort = () => {
+        const sortChampUIArray = ChampionFilter.sort;
+        ChampionFilter.sort = () => {
             sortChampUIArray();
             clearChildren(grid.modifyElement);
-            for (let champ of championUIs)
+            for (let champ of ChampionData.UIs)
                 grid.modifyElement.appendChild(champ.modifyElement);
         };
-        sort();
+        ChampionFilter.sort();
     });
     numbersCheckInputField.modifyElement.checked = true;
     numbersCheckInputField.modifyEvents.addOnChange(() => {
@@ -1074,15 +1285,15 @@ headerText.modifyStyle.cursor = "default";
                 ui.synergyText.modifyStyle.visibility = vis;
                 ui.counterText.modifyStyle.visibility = vis;
             }
-            for (let ui of championUIs)
+            for (let ui of ChampionData.UIs)
                 setUI(ui);
-            for (let ui of blueSide.picks)
+            for (let ui of Side.blue.picks)
                 setUI(ui);
-            for (let ui of blueSide.bans)
+            for (let ui of Side.blue.bans)
                 setUI(ui);
-            for (let ui of redSide.picks)
+            for (let ui of Side.red.picks)
                 setUI(ui);
-            for (let ui of redSide.bans)
+            for (let ui of Side.red.bans)
                 setUI(ui);
         }
         if (numbersCheckInputField.modifyElement.checked) {
@@ -1094,17 +1305,17 @@ headerText.modifyStyle.cursor = "default";
     });
     (() => {
         function actionOnAllSideImages(action) {
-            for (let ui of blueSide.picks) {
-                action(blueSide, ui, blueSide.pickSrc);
+            for (let ui of Side.blue.picks) {
+                action(Side.blue, ui, Side.blue.pickSrc);
             }
-            for (let ui of redSide.picks) {
-                action(blueSide, ui, redSide.pickSrc);
+            for (let ui of Side.red.picks) {
+                action(Side.blue, ui, Side.red.pickSrc);
             }
-            for (let ui of blueSide.bans) {
-                action(blueSide, ui, blueSide.banSrc);
+            for (let ui of Side.blue.bans) {
+                action(Side.blue, ui, Side.blue.banSrc);
             }
-            for (let ui of redSide.bans) {
-                action(blueSide, ui, redSide.banSrc);
+            for (let ui of Side.red.bans) {
+                action(Side.blue, ui, Side.red.banSrc);
             }
         }
         function reset() {
@@ -1112,11 +1323,10 @@ headerText.modifyStyle.cursor = "default";
             pick.setChampionEvent = null;
             pick.set(null);
             headerText.modifyElement.textContent = "Champion Select";
-            for (let ui of championUIs) {
+            for (let ui of ChampionData.UIs) {
                 ui.reset();
             }
             actionOnAllSideImages((side, ui, originalSrc) => {
-                ui.set(null);
                 ui.reset();
                 ui.imageButton.modifyStyle.opacity = defaultValue.opacity + "%";
                 ui.text.modifyElement.textContent = "";
@@ -1162,10 +1372,7 @@ headerText.modifyStyle.cursor = "default";
             }
             function addBanSrcEvent(title, ui, friendlyTeam, enemyTeam) {
                 srcData.data.push({
-                    action: selectedUI => {
-                        selectedUI.ban();
-                        nextSrcEvent();
-                    },
+                    action: () => nextSrcEvent(),
                     title,
                     ui,
                     friendlyTeam,
@@ -1183,38 +1390,38 @@ headerText.modifyStyle.cursor = "default";
             }
             switch (phaseDropdown.selectedIndex) {
                 case 0:
-                    addBanSrcEvent("Blue Ban", blueSide.bans[0], blueSide, redSide);
-                    addBanSrcEvent("Red Ban", redSide.bans[0], redSide, blueSide);
-                    addBanSrcEvent("Blue Ban", blueSide.bans[1], blueSide, redSide);
-                    addBanSrcEvent("Red Ban", redSide.bans[1], redSide, blueSide);
-                    addBanSrcEvent("Blue Ban", blueSide.bans[2], blueSide, redSide);
-                    addBanSrcEvent("Red Ban", redSide.bans[2], blueSide, redSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[0], blueSide, redSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[0], redSide, blueSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[1], redSide, blueSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[1], blueSide, redSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[2], blueSide, redSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[2], redSide, blueSide);
-                    addBanSrcEvent("Blue Ban", blueSide.bans[3], blueSide, redSide);
-                    addBanSrcEvent("Red Ban", redSide.bans[3], redSide, blueSide);
-                    addBanSrcEvent("Blue Ban", blueSide.bans[4], blueSide, redSide);
-                    addBanSrcEvent("Red Ban", redSide.bans[4], redSide, blueSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[3], redSide, blueSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[3], blueSide, redSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[4], blueSide, redSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[4], redSide, blueSide);
+                    addBanSrcEvent("Blue Ban", Side.blue.bans[0], Side.blue, Side.red);
+                    addBanSrcEvent("Red Ban", Side.red.bans[0], Side.red, Side.blue);
+                    addBanSrcEvent("Blue Ban", Side.blue.bans[1], Side.blue, Side.red);
+                    addBanSrcEvent("Red Ban", Side.red.bans[1], Side.red, Side.blue);
+                    addBanSrcEvent("Blue Ban", Side.blue.bans[2], Side.blue, Side.red);
+                    addBanSrcEvent("Red Ban", Side.red.bans[2], Side.blue, Side.red);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[0], Side.blue, Side.red);
+                    addPickSrcEvent("Red Pick", Side.red.picks[0], Side.red, Side.blue);
+                    addPickSrcEvent("Red Pick", Side.red.picks[1], Side.red, Side.blue);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[1], Side.blue, Side.red);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[2], Side.blue, Side.red);
+                    addPickSrcEvent("Red Pick", Side.red.picks[2], Side.red, Side.blue);
+                    addBanSrcEvent("Blue Ban", Side.blue.bans[3], Side.blue, Side.red);
+                    addBanSrcEvent("Red Ban", Side.red.bans[3], Side.red, Side.blue);
+                    addBanSrcEvent("Blue Ban", Side.blue.bans[4], Side.blue, Side.red);
+                    addBanSrcEvent("Red Ban", Side.red.bans[4], Side.red, Side.blue);
+                    addPickSrcEvent("Red Pick", Side.red.picks[3], Side.red, Side.blue);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[3], Side.blue, Side.red);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[4], Side.blue, Side.red);
+                    addPickSrcEvent("Red Pick", Side.red.picks[4], Side.red, Side.blue);
                     break;
                 default:
-                    addPickSrcEvent("Blue Pick", blueSide.picks[0], blueSide, redSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[0], redSide, blueSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[1], redSide, blueSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[1], blueSide, redSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[2], blueSide, redSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[2], redSide, blueSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[3], redSide, blueSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[3], blueSide, redSide);
-                    addPickSrcEvent("Blue Pick", blueSide.picks[4], blueSide, redSide);
-                    addPickSrcEvent("Red Pick", redSide.picks[4], redSide, blueSide);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[0], Side.blue, Side.red);
+                    addPickSrcEvent("Red Pick", Side.red.picks[0], Side.red, Side.blue);
+                    addPickSrcEvent("Red Pick", Side.red.picks[1], Side.red, Side.blue);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[1], Side.blue, Side.red);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[2], Side.blue, Side.red);
+                    addPickSrcEvent("Red Pick", Side.red.picks[2], Side.red, Side.blue);
+                    addPickSrcEvent("Red Pick", Side.red.picks[3], Side.red, Side.blue);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[3], Side.blue, Side.red);
+                    addPickSrcEvent("Blue Pick", Side.blue.picks[4], Side.blue, Side.red);
+                    addPickSrcEvent("Red Pick", Side.red.picks[4], Side.red, Side.blue);
                     break;
             }
             nextSrcEvent();
@@ -1228,6 +1435,8 @@ headerText.modifyStyle.cursor = "default";
     const aatrox = Champion.get("Aatrox"), ahri = Champion.get("Ahri"), akali = Champion.get("Akali"), alistar = Champion.get("Alistar"), amumu = Champion.get("Amumu"), anivia = Champion.get("Anivia"), annie = Champion.get("Annie"), aphelios = Champion.get("Aphelios"), ashe = Champion.get("Ashe"), aurelionSol = Champion.get("Aurelion Sol"), azir = Champion.get("Azir"), bard = Champion.get("Bard"), blitzcrank = Champion.get("Blitzcrank"), brand = Champion.get("Brand"), braum = Champion.get("Braum"), caitlyn = Champion.get("Caitlyn"), camille = Champion.get("Camille"), cassiopeia = Champion.get("Cassiopeia"), choGath = Champion.get("Cho'Gath"), corki = Champion.get("Corki"), darius = Champion.get("Darius"), diana = Champion.get("Diana"), drMundo = Champion.get("Dr. Mundo"), draven = Champion.get("Draven"), ekko = Champion.get("Ekko"), elise = Champion.get("Elise"), evelynn = Champion.get("Evelynn"), ezreal = Champion.get("Ezreal"), fiddlesticks = Champion.get("Fiddlesticks"), fiora = Champion.get("Fiora"), fizz = Champion.get("Fizz"), galio = Champion.get("Galio"), gangplank = Champion.get("Gangplank"), garen = Champion.get("Garen"), gnar = Champion.get("Gnar"), gragas = Champion.get("Gragas"), graves = Champion.get("Graves"), hecarim = Champion.get("Hecarim"), heimerdinger = Champion.get("Heimerdinger"), illaoi = Champion.get("Illaoi"), irelia = Champion.get("Irelia"), ivern = Champion.get("Ivern"), janna = Champion.get("Janna"), jarvanIV = Champion.get("Jarvan IV"), jax = Champion.get("Jax"), jayce = Champion.get("Jayce"), jhin = Champion.get("Jhin"), jinx = Champion.get("Jinx"), kaiSa = Champion.get("Kai'Sa"), kalista = Champion.get("Kalista"), karma = Champion.get("Karma"), karthus = Champion.get("Karthus"), kassadin = Champion.get("Kassadin"), katarina = Champion.get("Katarina"), kayle = Champion.get("Kayle"), kayn = Champion.get("Kayn"), kennen = Champion.get("Kennen"), khaZix = Champion.get("Kha'Zix"), kindred = Champion.get("Kindred"), kled = Champion.get("Kled"), kogMaw = Champion.get("Kog'Maw"), leBlanc = Champion.get("LeBlanc"), leeSin = Champion.get("Lee Sin"), leona = Champion.get("Leona"), lissandra = Champion.get("Lissandra"), lucian = Champion.get("Lucian"), lulu = Champion.get("Lulu"), lux = Champion.get("Lux"), malphite = Champion.get("Malphite"), malzahar = Champion.get("Malzahar"), maokai = Champion.get("Maokai"), masterYi = Champion.get("Master Yi"), missFortune = Champion.get("Miss Fortune"), mordekaiser = Champion.get("Mordekaiser"), morgana = Champion.get("Morgana"), nami = Champion.get("Nami"), nasus = Champion.get("Nasus"), nautilus = Champion.get("Nautilus"), neeko = Champion.get("Neeko"), nidalee = Champion.get("Nidalee"), nocturne = Champion.get("Nocturne"), nunu = Champion.get("Nunu"), olaf = Champion.get("Olaf"), orianna = Champion.get("Orianna"), ornn = Champion.get("Ornn"), pantheon = Champion.get("Pantheon"), poppy = Champion.get("Poppy"), pyke = Champion.get("Pyke"), qiyana = Champion.get("Qiyana"), quinn = Champion.get("Quinn"), rakan = Champion.get("Rakan"), rammus = Champion.get("Rammus"), rekSai = Champion.get("Rek'Sai"), renekton = Champion.get("Renekton"), rengar = Champion.get("Rengar"), riven = Champion.get("Riven"), rumble = Champion.get("Rumble"), ryze = Champion.get("Ryze"), sejuani = Champion.get("Sejuani"), senna = Champion.get("Senna"), sett = Champion.get("Sett"), shaco = Champion.get("Shaco"), shen = Champion.get("Shen"), shyvana = Champion.get("Shyvana"), singed = Champion.get("Singed"), sion = Champion.get("Sion"), sivir = Champion.get("Sivir"), skarner = Champion.get("Skarner"), sona = Champion.get("Sona"), soraka = Champion.get("Soraka"), swain = Champion.get("Swain"), sylas = Champion.get("Sylas"), syndra = Champion.get("Syndra"), tahmKench = Champion.get("Tahm Kench"), taliyah = Champion.get("Taliyah"), talon = Champion.get("Talon"), taric = Champion.get("Taric"), teemo = Champion.get("Teemo"), thresh = Champion.get("Thresh"), tristana = Champion.get("Tristana"), trundle = Champion.get("Trundle"), tryndamere = Champion.get("Tryndamere"), twistedFate = Champion.get("Twisted Fate"), twitch = Champion.get("Twitch"), udyr = Champion.get("Udyr"), urgot = Champion.get("Urgot"), varus = Champion.get("Varus"), vayne = Champion.get("Vayne"), veigar = Champion.get("Veigar"), velKoz = Champion.get("Vel'Koz"), vi = Champion.get("Vi"), viktor = Champion.get("Viktor"), vladimir = Champion.get("Vladimir"), volibear = Champion.get("Volibear"), warwick = Champion.get("Warwick"), wukong = Champion.get("Wukong"), xayah = Champion.get("Xayah"), xerath = Champion.get("Xerath"), xinZhao = Champion.get("Xin Zhao"), yasuo = Champion.get("Yasuo"), yorick = Champion.get("Yorick"), yuumi = Champion.get("Yuumi"), zac = Champion.get("Zac"), zed = Champion.get("Zed"), ziggs = Champion.get("Ziggs"), zilean = Champion.get("Zilean"), zoe = Champion.get("Zoe"), zyra = Champion.get("Zyra");
     const toDoDescription = "TO DO: details!";
     aatrox.role = Role.Top;
+    aatrox.civilization = Civilization.Darkness;
+    aatrox.mode = Mode.Tank | Mode.ADC | Mode.PowerEngager;
     aatrox.addGoodAgainst(gangplank, toDoDescription);
     aatrox.addGoodAgainst(darius, toDoDescription);
     aatrox.addGoodAgainst(galio, toDoDescription);
@@ -1235,6 +1444,8 @@ headerText.modifyStyle.cursor = "default";
     aatrox.addGoodWith(yasuo, toDoDescription);
     aatrox.addGoodWith(azir, toDoDescription);
     ahri.role = Role.Middle;
+    ahri.civilization = Civilization.Fire;
+    ahri.mode = Mode.APC;
     ahri.addGoodAgainst(choGath, toDoDescription);
     ahri.addGoodAgainst(azir, toDoDescription);
     ahri.addGoodAgainst(viktor, toDoDescription);
@@ -1242,13 +1453,18 @@ headerText.modifyStyle.cursor = "default";
     ahri.addGoodWith(riven, toDoDescription);
     ahri.addGoodWith(irelia, toDoDescription);
     akali.role = Role.Middle;
+    akali.civilization = Civilization.Fire;
+    akali.mode = Mode.ADC | Mode.Burster | Mode.Sly | Mode.PowerEngager;
     akali.addGoodAgainst(nasus, toDoDescription);
     akali.addGoodAgainst(garen, toDoDescription);
     akali.addGoodAgainst(poppy, toDoDescription);
+    akali.addGoodAgainst(aurelionSol, "Akali will get up in the face of Aurelion Sol and make it difficult for him to get off. She can hide in her shroud and to avoid being blasted away, as long as she makes sure to avoid his stars from revealing her position. Her ultimate can close the gap and so can her shuriken.");
     akali.addGoodWith(diana, toDoDescription);
     akali.addGoodWith(leBlanc, toDoDescription);
     akali.addGoodWith(katarina, toDoDescription);
     amumu.role = Role.Jungle;
+    amumu.civilization = Civilization.Fire;
+    amumu.mode = Mode.Tank | Mode.Utility | Mode.APC;
     amumu.addGoodAgainst(graves, toDoDescription);
     amumu.addGoodAgainst(shyvana, toDoDescription);
     amumu.addGoodAgainst(leeSin, toDoDescription);
@@ -1256,6 +1472,8 @@ headerText.modifyStyle.cursor = "default";
     amumu.addGoodWith(fiddlesticks, toDoDescription);
     amumu.addGoodWith(morgana, toDoDescription);
     anivia.role = Role.Middle;
+    anivia.civilization = Civilization.Water | Civilization.Nature;
+    anivia.mode = Mode.APC;
     anivia.addGoodAgainst(kayle, toDoDescription);
     anivia.addGoodAgainst(azir, toDoDescription);
     anivia.addGoodAgainst(akali, toDoDescription);
@@ -1263,6 +1481,8 @@ headerText.modifyStyle.cursor = "default";
     anivia.addGoodWith(drMundo, toDoDescription);
     anivia.addGoodWith(vayne, toDoDescription);
     annie.role = Role.Middle;
+    annie.civilization = Civilization.Fire;
+    annie.mode = Mode.APC;
     annie.addGoodAgainst(diana, toDoDescription);
     annie.addGoodAgainst(jayce, toDoDescription);
     annie.addGoodAgainst(viktor, toDoDescription);
@@ -1270,22 +1490,36 @@ headerText.modifyStyle.cursor = "default";
     annie.addGoodWith(amumu, toDoDescription);
     annie.addGoodWith(lucian, toDoDescription);
     aphelios.role = Role.Bottom;
+    aphelios.civilization = Civilization.Nature | Civilization.Water | Civilization.Light;
+    aphelios.mode = Mode.ADC | Mode.Utility | Mode.SplitPusher | Mode.EpicKiller;
     ashe.role = Role.Bottom;
+    ashe.civilization = Civilization.Water | Civilization.Light;
+    ashe.mode = Mode.ADC;
     ashe.addGoodAgainst(corki, toDoDescription);
     ashe.addGoodAgainst(lucian, toDoDescription);
     ashe.addGoodAgainst(sivir, toDoDescription);
     ashe.addGoodWith(leona, toDoDescription);
     ashe.addGoodWith(janna, toDoDescription);
     ashe.addGoodWith(thresh, toDoDescription);
-    aurelionSol.role = Role.Middle;
+    aurelionSol.role = Role.Top | Role.Middle;
+    aurelionSol.civilization = Civilization.Water | Civilization.Nature;
+    aurelionSol.mode = Mode.APC;
+    aurelionSol.addGoodAgainst(zoe, "Zoe wants to keep her distance? So does Aurelion Sol does too!");
+    aurelionSol.addGoodAgainst(taliyah, "Taliyah can get Aurelion Sol in a bad position with her earth bump, but Aurelion Sol benefits from his stars as he can kit while dealing damage.");
+    aurelionSol.addGoodAgainst(heimerdinger, "Heimerdinger's turrets cannot reach Aurelion Sol when his stars are outter-orbiting, Aurelion Sol does not need to get into the range of Heimerdinger's turrets to farm. Aurelion Sol can kit around easily while dealing damage with his stars, dodging any energized rays the turrets might throw at you, and his rockets, and his stun. Can easily escape from his ultimate sentry as well. ");
+    aurelionSol.addGoodWith(morgana, "Morgana keeps the enemies at bay with her skillshot and ultimate. Spell shield may not be so useful on Aurelion Sol as it is not wise for him to get close to the enemies but can let him heard engage to clean up or chase down.");
     azir.role = Role.Middle;
-    azir.addGoodAgainst(yasuo, toDoDescription);
-    azir.addGoodAgainst(taliyah, toDoDescription);
-    azir.addGoodAgainst(syndra, toDoDescription);
-    azir.addGoodWith(aatrox, toDoDescription);
-    azir.addGoodWith(yasuo, toDoDescription);
-    azir.addGoodWith(alistar, toDoDescription);
+    azir.civilization = Civilization.Nature | Civilization.Water;
+    azir.mode = Mode.APC;
+    azir.addGoodAgainst(yasuo, "Azir can ultimate away Yasuo if he gets too close. Be careful for his windshield when thrusting your soliders as it can halt their movement. Other than that, there should be no worry.");
+    azir.addGoodAgainst(gangplank, "Azir's basic attack has no travel time, it is faster than Gangplank's gun, use this to destroy barrels before he can make them explode. Azir also like to keep his distance, so barrels should not be much of a problem as long as Azir can kit well.");
+    azir.addGoodAgainst(heimerdinger, "Azir can send his soliders to clear Heimerdinger's turrets.");
+    azir.addGoodWith(teemo, "Azir rather use his soliders to attack, Teemo's blind is ineffective. Teemo's shrooms can be annoying, Azir should equip himself with a red flare.");
+    azir.addGoodWith(yasuo, "Azir can sending multiple enemies flying with his ultimate, perfect for Yasuo to follow up.");
+    azir.addGoodWith(alistar, "Alistar will make Azir's life easier with his stuns and knockups. Alistar can push away enemies if they get too close or direct them into the soliders with a headbutt. He can also smash to send enemies flying which can be followed up with Azir's ultimate.");
     bard.role = Role.Support;
+    bard.civilization = Civilization.Zero;
+    bard.mode = Mode.Utility | Mode.APC;
     bard.addGoodAgainst(veigar, toDoDescription);
     bard.addGoodAgainst(nautilus, toDoDescription);
     bard.addGoodAgainst(braum, toDoDescription);
@@ -1293,6 +1527,8 @@ headerText.modifyStyle.cursor = "default";
     bard.addGoodWith(heimerdinger, toDoDescription);
     bard.addGoodWith(jhin, toDoDescription);
     blitzcrank.role = Role.Support;
+    blitzcrank.civilization = Civilization.Fire;
+    blitzcrank.mode = Mode.Utility | Mode.APC;
     blitzcrank.addGoodAgainst(lux, toDoDescription);
     blitzcrank.addGoodAgainst(zyra, toDoDescription);
     blitzcrank.addGoodAgainst(nami, toDoDescription);
@@ -1300,6 +1536,8 @@ headerText.modifyStyle.cursor = "default";
     blitzcrank.addGoodWith(vayne, toDoDescription);
     blitzcrank.addGoodWith(ezreal, toDoDescription);
     brand.role = Role.Middle | Role.Support;
+    brand.civilization = Civilization.Water | Civilization.Nature;
+    brand.mode = Mode.Utility | Mode.APC;
     brand.addGoodAgainst(velKoz, toDoDescription);
     brand.addGoodAgainst(rakan, toDoDescription);
     brand.addGoodAgainst(braum, toDoDescription);
@@ -1307,6 +1545,8 @@ headerText.modifyStyle.cursor = "default";
     brand.addGoodWith(sona, toDoDescription);
     brand.addGoodWith(maokai, toDoDescription);
     braum.role = Role.Support;
+    braum.civilization = Civilization.Zero;
+    braum.mode = Mode.Utility | Mode.Tank;
     braum.addGoodAgainst(fiddlesticks, toDoDescription);
     braum.addGoodAgainst(karma, toDoDescription);
     braum.addGoodAgainst(lux, toDoDescription);
@@ -1314,6 +1554,8 @@ headerText.modifyStyle.cursor = "default";
     braum.addGoodWith(ezreal, toDoDescription);
     braum.addGoodWith(twitch, toDoDescription);
     caitlyn.role = Role.Bottom;
+    caitlyn.civilization = Civilization.Water;
+    caitlyn.mode = Mode.ADC;
     caitlyn.addGoodAgainst(ezreal, toDoDescription);
     caitlyn.addGoodAgainst(ziggs, toDoDescription);
     caitlyn.addGoodAgainst(xayah, toDoDescription);
@@ -1321,6 +1563,8 @@ headerText.modifyStyle.cursor = "default";
     caitlyn.addGoodWith(thresh, toDoDescription);
     caitlyn.addGoodWith(nami, toDoDescription);
     camille.role = Role.Top;
+    camille.civilization = Civilization.Fire;
+    camille.mode = Mode.Tank | Mode.ADC;
     camille.addGoodAgainst(cassiopeia, toDoDescription);
     camille.addGoodAgainst(garen, toDoDescription);
     camille.addGoodAgainst(drMundo, toDoDescription);
@@ -1328,6 +1572,8 @@ headerText.modifyStyle.cursor = "default";
     camille.addGoodWith(thresh, toDoDescription);
     camille.addGoodWith(galio, toDoDescription);
     cassiopeia.role = Role.Middle;
+    cassiopeia.civilization = Civilization.Water | Civilization.Nature;
+    cassiopeia.mode = Mode.APC | Mode.Utility;
     cassiopeia.addGoodAgainst(ryze, toDoDescription);
     cassiopeia.addGoodAgainst(azir, toDoDescription);
     cassiopeia.addGoodAgainst(zed, toDoDescription);
@@ -1335,6 +1581,8 @@ headerText.modifyStyle.cursor = "default";
     cassiopeia.addGoodWith(singed, toDoDescription);
     cassiopeia.addGoodWith(yorick, toDoDescription);
     choGath.role = Role.Top | Role.Middle;
+    choGath.civilization = Civilization.Nature;
+    choGath.mode = Mode.Tank | Mode.APC | Mode.Utility | Mode.EpicKiller | Mode.Scaler;
     choGath.addGoodAgainst(galio, toDoDescription);
     choGath.addGoodAgainst(pantheon, toDoDescription);
     choGath.addGoodAgainst(gragas, toDoDescription);
@@ -1342,6 +1590,8 @@ headerText.modifyStyle.cursor = "default";
     choGath.addGoodWith(lulu, toDoDescription);
     choGath.addGoodWith(aatrox, toDoDescription);
     corki.role = Role.Bottom;
+    corki.civilization = Civilization.Fire | Civilization.Water;
+    corki.mode = Mode.ADC;
     corki.addGoodAgainst(diana, toDoDescription);
     corki.addGoodAgainst(ryze, toDoDescription);
     corki.addGoodAgainst(ziggs, toDoDescription);
@@ -1349,6 +1599,7 @@ headerText.modifyStyle.cursor = "default";
     corki.addGoodWith(thresh, toDoDescription);
     corki.addGoodWith(blitzcrank, toDoDescription);
     darius.role = Role.Top;
+    darius.mode = Mode.ADC | Mode.Tank;
     darius.addGoodAgainst(nautilus, toDoDescription);
     darius.addGoodAgainst(galio, toDoDescription);
     darius.addGoodAgainst(choGath, toDoDescription);
@@ -1356,13 +1607,16 @@ headerText.modifyStyle.cursor = "default";
     darius.addGoodWith(olaf, toDoDescription);
     darius.addGoodWith(fiora, toDoDescription);
     diana.role = Role.Middle;
+    diana.mode = Mode.APC;
     diana.addGoodAgainst(zed, toDoDescription);
     diana.addGoodAgainst(leBlanc, toDoDescription);
     diana.addGoodAgainst(lux, toDoDescription);
+    diana.addGoodAgainst(aurelionSol, "");
     diana.addGoodWith(akali, toDoDescription);
     diana.addGoodWith(yasuo, toDoDescription);
     diana.addGoodWith(kassadin, toDoDescription);
     drMundo.role = Role.Top | Role.Jungle;
+    drMundo.mode = Mode.Tank;
     drMundo.addGoodAgainst(darius, toDoDescription);
     drMundo.addGoodAgainst(teemo, toDoDescription);
     drMundo.addGoodAgainst(irelia, toDoDescription);
@@ -1370,6 +1624,7 @@ headerText.modifyStyle.cursor = "default";
     drMundo.addGoodWith(olaf, toDoDescription);
     drMundo.addGoodWith(jax, toDoDescription);
     draven.role = Role.Bottom;
+    draven.mode = Mode.ADC;
     draven.addGoodAgainst(corki, toDoDescription);
     draven.addGoodAgainst(sivir, toDoDescription);
     draven.addGoodAgainst(lucian, toDoDescription);
@@ -1377,6 +1632,7 @@ headerText.modifyStyle.cursor = "default";
     draven.addGoodWith(darius, toDoDescription);
     draven.addGoodWith(leona, toDoDescription);
     ekko.role = Role.Middle | Role.Jungle;
+    ekko.mode = Mode.Tank | Mode.APC;
     ekko.addGoodAgainst(azir, toDoDescription);
     ekko.addGoodAgainst(karma, toDoDescription);
     ekko.addGoodAgainst(zed, toDoDescription);
@@ -1384,6 +1640,7 @@ headerText.modifyStyle.cursor = "default";
     ekko.addGoodWith(bard, toDoDescription);
     ekko.addGoodWith(lulu, toDoDescription);
     elise.role = Role.Jungle;
+    elise.mode = Mode.APC | Mode.Utility;
     elise.addGoodAgainst(choGath, toDoDescription);
     elise.addGoodAgainst(rekSai, toDoDescription);
     elise.addGoodAgainst(udyr, toDoDescription);
@@ -1391,6 +1648,7 @@ headerText.modifyStyle.cursor = "default";
     elise.addGoodWith(blitzcrank, toDoDescription);
     elise.addGoodWith(karma, toDoDescription);
     evelynn.role = Role.Jungle;
+    evelynn.mode = Mode.ADC | Mode.Burster | Mode.Sly;
     evelynn.addGoodAgainst(graves, toDoDescription);
     evelynn.addGoodAgainst(skarner, toDoDescription);
     evelynn.addGoodAgainst(nidalee, toDoDescription);
@@ -1573,16 +1831,16 @@ headerText.modifyStyle.cursor = "default";
     karthus.addGoodWith(amumu, toDoDescription);
     karthus.addGoodWith(yorick, toDoDescription);
     kassadin.role = Role.Middle;
-    kassadin.addGoodAgainst(azir, toDoDescription);
+    kassadin.addGoodAgainst(azir, "Kassadin can close the gap between Azir and him very easily with his ultimate. If Azir uses his ultimate to get Kassadin off, Kassadin can use his ultimate again after a short delay to teleport right back to him.");
     kassadin.addGoodAgainst(karma, toDoDescription);
     kassadin.addGoodAgainst(leBlanc, toDoDescription);
+    kassadin.addGoodAgainst(aurelionSol, "Kassadin will get near Aurelion Sol, exactly what he does not want. He also has a mage shield protecting his from some star damage. Kassadin will usually stay within the inner-layer of stars, so Aurelion Sol better be running!");
     kassadin.addGoodWith(diana, toDoDescription);
     kassadin.addGoodWith(ahri, toDoDescription);
     kassadin.addGoodWith(leeSin, toDoDescription);
     katarina.role = Role.Middle;
     katarina.addGoodAgainst(ryze, toDoDescription);
     katarina.addGoodAgainst(syndra, toDoDescription);
-    katarina.addGoodAgainst(viktor, toDoDescription);
     katarina.addGoodWith(amumu, toDoDescription);
     katarina.addGoodWith(galio, toDoDescription);
     katarina.addGoodWith(morgana, toDoDescription);
@@ -1618,6 +1876,7 @@ headerText.modifyStyle.cursor = "default";
     kled.addGoodAgainst(rengar, toDoDescription);
     kled.addGoodAgainst(choGath, toDoDescription);
     kled.addGoodAgainst(quinn, toDoDescription);
+    kled.addGoodAgainst(azir, "Kled can completely destroy Azir with his ultimate or if he lands a pull with his hook. Kled's ultimate cannot be stopped, so Azir must get out of the way before it's too late.");
     kled.addGoodWith(galio, toDoDescription);
     kled.addGoodWith(camille, toDoDescription);
     kled.addGoodWith(masterYi, toDoDescription);
@@ -1632,6 +1891,7 @@ headerText.modifyStyle.cursor = "default";
     leBlanc.addGoodAgainst(ryze, toDoDescription);
     leBlanc.addGoodAgainst(karma, toDoDescription);
     leBlanc.addGoodAgainst(lux, toDoDescription);
+    leBlanc.addGoodAgainst(viktor, "LeBlanc can get in and out very quickly. Viktor won't be able to land a stun with his gravitational field and landing his laser can be difficult when facinh a flashy enemy.");
     leBlanc.addGoodWith(akali, toDoDescription);
     leBlanc.addGoodWith(veigar, toDoDescription);
     leBlanc.addGoodWith(alistar, toDoDescription);
@@ -1789,7 +2049,8 @@ headerText.modifyStyle.cursor = "default";
     orianna.addGoodWith(malphite, toDoDescription);
     orianna.addGoodWith(yasuo, toDoDescription);
     orianna.addGoodWith(jarvanIV, toDoDescription);
-    ornn.role = Role.Middle | Role.Top;
+    ornn.role = Role.Top | Role.Middle | Role.Support | Role.Jungle;
+    ornn.mode = Mode.Tank | Mode.Utility | Mode.ADC;
     ornn.addGoodAgainst(galio, toDoDescription);
     ornn.addGoodAgainst(malphite, toDoDescription);
     ornn.addGoodAgainst(shen, toDoDescription);
@@ -2082,16 +2343,17 @@ headerText.modifyStyle.cursor = "default";
     vi.addGoodAgainst(nidalee, toDoDescription);
     vi.addGoodAgainst(shaco, toDoDescription);
     vi.addGoodAgainst(elise, toDoDescription);
+    vi.addGoodAgainst(azir, "Vi can cast her ultimate on Azir and there is no way she can be stopped. Vi has a dash that can close the gap between her and Azir, making Azir's attack futile which he gets punched in the face.");
     vi.addGoodWith(yasuo, toDoDescription);
     vi.addGoodWith(caitlyn, toDoDescription);
     vi.addGoodWith(orianna, toDoDescription);
     viktor.role = Role.Middle;
-    viktor.addGoodAgainst(ryze, toDoDescription);
-    viktor.addGoodAgainst(diana, toDoDescription);
-    viktor.addGoodAgainst(lissandra, toDoDescription);
-    viktor.addGoodWith(jarvanIV, toDoDescription);
-    viktor.addGoodWith(sona, toDoDescription);
-    viktor.addGoodWith(malzahar, toDoDescription);
+    viktor.mode = Mode.APC;
+    viktor.addGoodAgainst(ryze, "Viktor's ultimate can cancel Ryze's ultimate (I think?). Viktor's range is further than Ryze's.");
+    viktor.addGoodAgainst(katarina, "Viktor can cancel Katarina's ultimate with his ultimate. Katarina must be moving or she will be stunned in Viktor's gravitational field. A good Katarina can avoid this, but in low-elo, most don't predict the ultimate cancel.");
+    viktor.addGoodWith(jarvanIV, "Jarvan IV can trap enemies within his ultimate which allows for Viktor's ultimate to maximize damage. Hard CC can be chained with Jarvan IV's CC dash and Viktor's gravitational field.");
+    viktor.addGoodWith(sona, "Sona makes is easy to cast a good ultimate, the move speed she gives you can be used for poking, like a hit and run.");
+    viktor.addGoodWith(malzahar, "Malzahar keeps enemies in one place with his ultimate, perfect for Viktor's ultimate! Landing a gravitional stun will allow Malzahar's summons to deal damage instead of chasing.");
     vladimir.role = Role.Top | Role.Middle;
     vladimir.addGoodAgainst(ryze, toDoDescription);
     vladimir.addGoodAgainst(gangplank, toDoDescription);
@@ -2117,6 +2379,7 @@ headerText.modifyStyle.cursor = "default";
     wukong.addGoodAgainst(gragas, toDoDescription);
     wukong.addGoodAgainst(trundle, toDoDescription);
     wukong.addGoodAgainst(jayce, toDoDescription);
+    wukong.addGoodAgainst(aurelionSol, "Wukong can up into Aurelion Sol's face and keep there with his ultimate. Wukong can close the gap easily with his dash, and he can get close by using his invisibility when he makes a clone.");
     wukong.addGoodWith(galio, toDoDescription);
     wukong.addGoodWith(bard, toDoDescription);
     wukong.addGoodWith(sion, toDoDescription);
@@ -2162,7 +2425,7 @@ headerText.modifyStyle.cursor = "default";
     yuumi.addGoodWith(vayne, toDoDescription);
     yuumi.addGoodWith(caitlyn, toDoDescription);
     yuumi.addGoodWith(jinx, toDoDescription);
-    zac.role = Role.Jungle;
+    zac.role = Role.Support | Role.Jungle;
     zac.addGoodAgainst(wukong, toDoDescription);
     zac.addGoodAgainst(trundle, toDoDescription);
     zac.addGoodAgainst(skarner, toDoDescription);
