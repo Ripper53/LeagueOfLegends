@@ -579,7 +579,7 @@ class ChampionSelectUI extends UIElement {
         this.hoverImage.modifyStyle.left = "0px";
         this.imageButton.modifyEvents.addOnPointerEnter(() => {
             this.hoverImage.modifyStyle.visibility = "visible";
-            if (this.champion === null)
+            if (this.champion === null || !numbersCheckInputField.modifyElement.checked)
                 return;
             miniPopUpInfo.display(this.champion);
         });
@@ -806,6 +806,13 @@ class SideLayoutUI extends VerticalLayoutUI {
         });
     }
 }
+class InputFieldUI extends UIElement {
+    constructor() {
+        super(document.createElement('input'));
+    }
+}
+const numbersCheckInputField = new InputFieldUI();
+numbersCheckInputField.modifyElement.type = "checkbox";
 const ChampionData = {
     UIs: [],
     clear: () => {
@@ -1215,11 +1222,6 @@ class TextButtonUI extends TextUI {
         return ButtonUI.setEvents(btn, (style, color) => style.color = color);
     }
 }
-class InputFieldUI extends UIElement {
-    constructor() {
-        super(document.createElement('input'));
-    }
-}
 const Random = {
     getRandomArbitrary: (min, max) => Math.random() * (max - min) + min,
     getRandomInt: (min, max) => Math.floor(Math.random() * max) + min
@@ -1316,10 +1318,8 @@ headerText.modifyStyle.cursor = "default";
     numbersCheckDiv.style.float = "right";
     numbersCheckDiv.style.height = "0px";
     numbersCheckDiv.style.top = "-15px";
-    const numbersCheckInputField = new InputFieldUI();
     numbersCheckDiv.appendChild(numbersCheckInputField.modifyElement);
     numbersCheckInputField.modifyStyle.display = "inline-block";
-    numbersCheckInputField.modifyElement.type = "checkbox";
     const numbersCheckText = getTextUI();
     numbersCheckDiv.appendChild(numbersCheckText.modifyElement);
     numbersCheckText.modifyStyle.cursor = "default";
