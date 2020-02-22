@@ -1,33 +1,57 @@
 class ChampionInfo {
-    constructor(champion, title, description, score) {
+    constructor(champion, targetChampion, title, description, score) {
         this.champion = champion;
+        this.targetChampion = targetChampion;
         this.title = title;
         this.description = description;
         this.score = score;
     }
-    static load(info, title, color, w, readOnly) {
+    getChampion(champion) {
+        return this.champion !== champion ? this.champion : this.targetChampion;
+    }
+    static loadDetails(details, w) {
+        const descriptionParagraph = document.createElement('textarea');
+        descriptionParagraph.style.display = "block";
+        descriptionParagraph.textContent += details;
+        descriptionParagraph.style.width = (w - 50) + "px";
+        descriptionParagraph.style.height = "100px";
+        descriptionParagraph.style.resize = "none";
+        return descriptionParagraph;
+    }
+    static loadTitle(champion, info, title, color) {
         const pInfo = document.createElement('p');
         const strongTitle = document.createElement('strong');
         pInfo.appendChild(strongTitle);
-        strongTitle.textContent = title + info.champion.name;
+        strongTitle.textContent = title + info.getChampion(champion).name;
         strongTitle.style.color = color;
         strongTitle.style.fontFamily = defaultValue.fontFamily;
         const img = document.createElement('img');
         pInfo.appendChild(img);
         img.style.width = "25px";
         img.style.height = "25px";
-        img.src = info.champion.getImageSrcPath();
-        const descriptionParagraph = document.createElement('textarea');
+        img.src = info.getChampion(champion).getImageSrcPath();
+        return pInfo;
+    }
+    static load(champion, info, title, color, w) {
+        const pInfo = this.loadTitle(champion, info, title, color);
+        const descriptionParagraph = this.loadDetails(info.description, w);
         pInfo.appendChild(descriptionParagraph);
-        descriptionParagraph.style.display = "block";
-        descriptionParagraph.textContent += info.description;
-        descriptionParagraph.style.width = (w - 50) + "px";
-        descriptionParagraph.style.height = "100px";
-        descriptionParagraph.readOnly = readOnly;
-        descriptionParagraph.style.resize = "none";
-        descriptionParagraph.addEventListener('input', () => {
-            info.description = descriptionParagraph.value;
+        descriptionParagraph.readOnly = true;
+        return pInfo;
+    }
+    static loadEditable(champion, info, title, color, w, infos, parent) {
+        const pInfo = this.loadTitle(champion, info, title, color);
+        const deleteBtn = ButtonUtility.getCloseButton(25, 25);
+        pInfo.appendChild(deleteBtn.modifyElement);
+        deleteBtn.modifyStyle.display = "inline-block";
+        deleteBtn.modifyStyle.float = "right";
+        deleteBtn.modifyEvents.addOnClick(() => {
+            infos.remove(info.targetChampion);
+            parent.removeChild(pInfo);
         });
+        const descriptionParagraph = this.loadDetails(info.description, w);
+        pInfo.appendChild(descriptionParagraph);
+        descriptionParagraph.addEventListener('input', () => info.description = descriptionParagraph.value);
         return pInfo;
     }
 }
@@ -79,12 +103,11 @@ class Champion {
         this.civilization = Civilization.Zero;
         this.mode = Mode.None;
         this.available = true;
-        this.goodAgainst = [];
-        this.badAgainst = [];
-        this.goodWith = [];
-        this.badWith = [];
         this.name = name;
         this.src = src;
+        this.goodAgainst = new GoodAgainstChampionInfoList(this);
+        this.goodWith = new GoodWithChampionInfoList(this);
+        this.badAgainst = new BadAgainstChampionInfoList(this);
         Champion.ALL.push(this);
     }
     static get(name) {
@@ -97,30 +120,10 @@ class Champion {
     getImageSrcPath() {
         return getImagePath(this.src);
     }
-    addChampionInfo(infos, oppositeInfos, champion, description, championInfo, oppositeInfo) {
-        let added = false;
-        const info = infos.find(v => v.champion === champion);
-        if (info === undefined) {
-            infos.push(championInfo);
-            added = true;
-        }
-        const opInfo = oppositeInfos.find(v => v.champion === this);
-        if (opInfo === undefined) {
-            oppositeInfos.push(oppositeInfo);
-        }
-        return added;
-    }
-    addGoodAgainst(champion, description, score = 1) {
-        return this.addChampionInfo(this.goodAgainst, champion.badAgainst, champion, description, new ChampionInfo(champion, "Good against " + champion.name, description, score), new ChampionInfo(this, "Bad against " + this.name, description, score));
-    }
-    addGoodWith(champion, description, score = 1) {
-        return this.addChampionInfo(this.goodWith, champion.goodWith, champion, description, new ChampionInfo(champion, "Good with " + champion.name, description, score), new ChampionInfo(this, "Good with " + this.name, description, score));
-    }
     clear() {
-        this.goodAgainst.length = 0;
-        this.goodWith.length = 0;
-        this.badAgainst.length = 0;
-        this.badAgainst.length = 0;
+        this.goodAgainst.clear();
+        this.badAgainst.clear();
+        this.goodWith.clear();
     }
 }
 Champion.ALL = [];
@@ -374,6 +377,18 @@ const defaultValue = {
     fontFamily: "Arial",
     opacity: 50
 };
+var ArrayUtility;
+(function (ArrayUtility) {
+    function remove(arr, item) {
+        const index = arr.findIndex(v => v === item);
+        if (index !== -1) {
+            arr.splice(index, 1);
+            return true;
+        }
+        return false;
+    }
+    ArrayUtility.remove = remove;
+})(ArrayUtility || (ArrayUtility = {}));
 function getImagePath(fileName) {
     return "Images/" + fileName;
 }
@@ -381,15 +396,18 @@ function clearChildren(element) {
     while (element.firstChild)
         element.removeChild(element.firstChild);
 }
-function getTextUI(textContent = "", border = 1, hexColor = "#000000") {
-    const text = new TextUI(textContent);
-    text.modifyStyle.color = "white";
-    text.modifyStyle.fontFamily = defaultValue.fontFamily;
-    text.modifyStyle.cursor = "pointer";
-    text.modifyStyle.userSelect = "none";
-    text.modifyStyle.textShadow = `${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px`;
-    return text;
-}
+var TextUtility;
+(function (TextUtility) {
+    function getTextUI(textContent = "", border = 1, hexColor = "#000000") {
+        const text = new TextUI(textContent);
+        text.modifyStyle.color = "white";
+        text.modifyStyle.fontFamily = defaultValue.fontFamily;
+        text.modifyStyle.userSelect = "none";
+        text.modifyStyle.textShadow = `${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px`;
+        return text;
+    }
+    TextUtility.getTextUI = getTextUI;
+})(TextUtility || (TextUtility = {}));
 var EnumUtility;
 (function (EnumUtility) {
     function hasFlag(value, check) {
@@ -431,11 +449,32 @@ const PointerUtility = new (class PointerUtility {
         this.moveEvents.push(func);
     }
 })();
+var ButtonUtility;
+(function (ButtonUtility) {
+    function getButton(text, w = 100, h = 30) {
+        const btn = new ButtonUI(text, w, h);
+        btn.setColor("rgb(0, 0, 0)");
+        btn.setHoverColor("rgb(100, 100, 100)");
+        btn.modifyText.modifyStyle.color = "white";
+        btn.modifyStyle.display = "inline-block";
+        btn.modifyStyle.fontFamily = defaultValue.fontFamily;
+        return btn;
+    }
+    ButtonUtility.getButton = getButton;
+    function getCloseButton(w, h) {
+        const closeBtn = new ButtonUI("X", w, h);
+        closeBtn.setColor("black");
+        closeBtn.setHoverColor("red");
+        closeBtn.modifyText.modifyStyle.color = "white";
+        closeBtn.modifyText.modifyStyle.fontFamily = defaultValue.fontFamily;
+        return closeBtn;
+    }
+    ButtonUtility.getCloseButton = getCloseButton;
+})(ButtonUtility || (ButtonUtility = {}));
 const popUpInfo = new (class PopUpInfo extends UIElement {
     constructor() {
         super(document.createElement('div'));
         this.width = 400;
-        this.readOnly = true;
         const width = this.width + "px";
         this.modifyStyle.backgroundColor = "black";
         this.modifyStyle.zIndex = "100";
@@ -492,14 +531,12 @@ const popUpInfo = new (class PopUpInfo extends UIElement {
             this.image.modifyElement.alt = champion.name;
             this.editInfoButton.modifyStyle.visibility = "visible";
             championInfoEdit.champion = champion;
-            for (let info of champion.goodAgainst)
-                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getGoodAgainst(info, this.width, this.readOnly).modifyElement);
-            for (let info of champion.badAgainst)
-                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getBadAgainst(info, this.width, this.readOnly).modifyElement);
-            for (let info of champion.goodWith)
-                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getGoodWith(info, this.width, this.readOnly).modifyElement);
-            for (let info of champion.badWith)
-                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getBadWith(info, this.width, this.readOnly).modifyElement);
+            for (let info of champion.goodAgainst.getInfos())
+                this.descriptionText.modifyElement.appendChild(ReadOnlyChampionInfoUI.getGoodAgainst(champion, info, this.width).modifyElement);
+            for (let info of champion.badAgainst.getInfos())
+                this.descriptionText.modifyElement.appendChild(ReadOnlyChampionInfoUI.getBadAgainst(champion, info, this.width).modifyElement);
+            for (let info of champion.goodWith.getInfos())
+                this.descriptionText.modifyElement.appendChild(ReadOnlyChampionInfoUI.getGoodWith(champion, info, this.width).modifyElement);
         }
         else {
             this.image.modifyElement.src = getImagePath(ui.src);
@@ -536,7 +573,7 @@ class ChampionSelectUI extends UIElement {
             popUpInfo.modifyStyle.left = pos.x + "px";
             popUpInfo.modifyStyle.top = pos.y + "px";
         });
-        this.text = getTextUI();
+        this.text = TextUtility.getTextUI();
         this.modifyElement.appendChild(this.text.modifyElement);
         const fontSize = 12;
         this.text.modifyStyle.minHeight = fontSize + "px";
@@ -547,7 +584,7 @@ class ChampionSelectUI extends UIElement {
         this.text.modifyStyle.width = width;
         this.text.modifyStyle.pointerEvents = "none";
         const getHighlightedTextUI = (color = "#ffffff") => {
-            const text = getTextUI("", 4, color);
+            const text = TextUtility.getTextUI("", 4, color);
             this.modifyElement.appendChild(text.modifyElement);
             text.modifyStyle.zIndex = "10";
             text.modifyStyle.fontSize = "18px";
@@ -611,13 +648,11 @@ class ChampionSelectUI extends UIElement {
             const champ = ui.getChampion();
             if (champ === null)
                 continue;
-            const infoIndex = infos.findIndex(v => v.champion === champ);
+            const infoList = infos.getInfos();
+            const infoIndex = infoList.findIndex(v => v.targetChampion === champ);
             if (infoIndex !== -1) {
-                const info = infos[infoIndex], zeroIndexInfo = infos[0];
-                infos[0] = info;
-                infos.splice(0, 1);
-                infos.push(zeroIndexInfo);
-                champScore.champions.push(champ);
+                const info = infoList[infoIndex];
+                infos.moveToFront(infoIndex);
                 champScore.score += info.score;
             }
         }
@@ -822,18 +857,26 @@ const ChampionData = {
     load: data => {
         for (let d of data) {
             const champ = Champion.get(d.name);
-            for (let ga of d.goodAgainst) {
-                champ.addGoodAgainst(Champion.get(ga.name), ga.details, ga.score);
+            if (d.role)
+                champ.role = d.role;
+            if (d.mode)
+                champ.mode = d.mode;
+            if (d.goodAgainst) {
+                for (let ga of d.goodAgainst) {
+                    champ.goodAgainst.add(Champion.get(ga.name), ga.title, ga.details, ga.score);
+                }
             }
-            for (let gw of d.goodWith) {
-                champ.addGoodWith(Champion.get(gw.name), gw.details, gw.score);
+            if (d.goodWith) {
+                for (let gw of d.goodWith) {
+                    champ.goodWith.add(Champion.get(gw.name), gw.title, gw.details, gw.score);
+                }
             }
         }
     },
     save: () => {
-        function loadData(info) {
+        function loadData(champion, info) {
             return {
-                name: info.champion.name,
+                name: info.getChampion(champion).name,
                 title: info.title,
                 details: info.description,
                 score: info.score
@@ -843,14 +886,24 @@ const ChampionData = {
         for (let champion of Champion.ALL) {
             const d = {
                 name: champion.name,
-                goodWith: [],
-                goodAgainst: []
+                role: champion.role,
+                mode: champion.mode
             };
-            for (let info of champion.goodAgainst)
-                d.goodAgainst.push(loadData(info));
-            for (let info of champion.goodWith)
-                d.goodWith.push(loadData(info));
-            data.push(d);
+            let hasData = false;
+            if (champion.goodAgainst.length > 0) {
+                hasData = true;
+                d.goodAgainst = [];
+                for (let info of champion.goodAgainst.getInfos())
+                    d.goodAgainst.push(loadData(champion, info));
+            }
+            if (champion.goodWith.length > 0) {
+                hasData = true;
+                d.goodWith = [];
+                for (let info of champion.goodWith.getInfos())
+                    d.goodWith.push(loadData(champion, info));
+            }
+            if (hasData)
+                data.push(d);
         }
         return data;
     }
@@ -983,18 +1036,17 @@ const championInfoEdit = new (class ChampionInfoEdit extends UIElement {
         this.modifyElement.appendChild(this.detailsDiv);
         this.goodAgainstDiv = this.getDiv();
         this.goodWithDiv = this.getDiv();
-        const closeBtn = new ButtonUI("X", 50, 50);
+        const closeBtn = ButtonUtility.getCloseButton(50, 50);
         this.modifyElement.appendChild(closeBtn.modifyElement);
-        closeBtn.setColor("black");
-        closeBtn.setHoverColor("red");
+        closeBtn.modifyText.modifyStyle.fontSize = "28px";
         closeBtn.modifyStyle.position = "absolute";
         closeBtn.modifyStyle.right = "0px";
         closeBtn.modifyStyle.top = "0px";
-        closeBtn.modifyText.modifyStyle.color = "white";
-        closeBtn.modifyText.modifyStyle.fontFamily = defaultValue.fontFamily;
-        closeBtn.modifyText.modifyStyle.fontSize = "28px";
         closeBtn.modifyEvents.addOnClick(() => this.hide());
         this.hide();
+    }
+    hide() {
+        this.modifyStyle.display = "none";
     }
     getDiv() {
         const div = document.createElement('div');
@@ -1011,52 +1063,136 @@ const championInfoEdit = new (class ChampionInfoEdit extends UIElement {
         this.championImageUI.modifyElement.src = this.champion.getImageSrcPath();
         clearChildren(this.goodAgainstDiv);
         clearChildren(this.goodWithDiv);
-        for (let info of this.champion.goodAgainst) {
-            this.goodAgainstDiv.appendChild(this.getGoodAgainst(info).modifyElement);
+        for (let info of this.champion.goodAgainst.getInfos()) {
+            this.goodAgainstDiv.appendChild(this.getGoodAgainst(info, this.champion.goodAgainst).modifyElement);
         }
-        for (let info of this.champion.goodWith) {
-            this.goodWithDiv.appendChild(this.getGoodWith(info).modifyElement);
+        for (let info of this.champion.goodWith.getInfos()) {
+            this.goodWithDiv.appendChild(this.getGoodWith(info, this.champion.goodWith).modifyElement);
         }
         this.modifyStyle.display = "block";
     }
-    getGoodAgainst(info) {
-        return ChampionInfoUI.getGoodAgainst(info, 400, false);
+    getGoodAgainst(info, infos) {
+        return EditableChampionInfoUI.getGoodAgainst(this.champion, info, 400, infos, this.goodAgainstDiv);
     }
-    getGoodWith(info) {
-        return ChampionInfoUI.getGoodWith(info, 400, false);
-    }
-    hide() {
-        this.modifyStyle.display = "none";
+    getGoodWith(info, infos) {
+        return EditableChampionInfoUI.getGoodWith(this.champion, info, 400, infos, this.goodWithDiv);
     }
     addInfo(details = "One does not simply write a detailed summary.", score = 1) {
         const champion = Champion.get(this.championSelectUI.modifyElement.options[this.championSelectUI.modifyElement.selectedIndex].text);
         switch (this.infoSelectUI.modifyElement.selectedIndex) {
             case 0:
-                if (this.champion.addGoodAgainst(champion, details, score))
-                    this.goodAgainstDiv.appendChild(this.getGoodAgainst(this.champion.goodAgainst[this.champion.goodAgainst.length - 1]).modifyElement);
+                if (this.champion.goodAgainst.add(champion, "", details, score))
+                    this.goodAgainstDiv.appendChild(this.getGoodAgainst(this.champion.goodAgainst.get(this.champion.goodAgainst.length - 1), this.champion.goodAgainst).modifyElement);
                 break;
             default:
-                if (this.champion.addGoodWith(champion, details, score))
-                    this.goodWithDiv.appendChild(this.getGoodWith(this.champion.goodWith[this.champion.goodWith.length - 1]).modifyElement);
+                if (this.champion.goodWith.add(champion, "", details, score))
+                    this.goodWithDiv.appendChild(this.getGoodWith(this.champion.goodWith.get(this.champion.goodWith.length - 1), this.champion.goodWith).modifyElement);
                 break;
         }
     }
 })();
-class ChampionInfoUI extends UIElement {
-    constructor(info, title, color, w, readOnly) {
-        super(ChampionInfo.load(info, title, color, w, readOnly));
+class ChampionInfoList {
+    constructor(champion) {
+        this.infos = [];
+        this.champion = champion;
     }
-    static getGoodAgainst(info, w, readOnly) {
-        return new ChampionInfoUI(info, "Good Against ", "#ffffff", w, readOnly);
+    get(index) {
+        return this.infos[index];
     }
-    static getGoodWith(info, w, readOnly) {
-        return new ChampionInfoUI(info, "Good With ", "#ffffff", w, readOnly);
+    getInfos() {
+        return this.infos;
     }
-    static getBadAgainst(info, w, readOnly) {
-        return new ChampionInfoUI(info, "Bad Against ", "#ffffff", w, readOnly);
+    moveToFront(index) {
+        const info = this.infos[index], zeroIndexInfo = this.infos[0];
+        this.infos[0] = info;
+        this.infos.splice(0, 1);
+        this.infos.push(zeroIndexInfo);
     }
-    static getBadWith(info, w, readOnly) {
-        return new ChampionInfoUI(info, "Bad With ", "#ffffff", w, readOnly);
+    get length() {
+        return this.infos.length;
+    }
+    clear() {
+        this.infos.length = 0;
+    }
+    addChampionInfo(championInfo, oppositeInfos) {
+        const info = this.infos.find(v => v.getChampion(this.champion) === championInfo.targetChampion);
+        if (info === undefined) {
+            this.infos.push(championInfo);
+            if (this !== oppositeInfos)
+                oppositeInfos.infos.push(championInfo);
+            return true;
+        }
+        return false;
+    }
+    removeChampionInfo(targetChampion, oppositeInfos) {
+        const championInfo = this.infos.find(v => v.targetChampion === targetChampion);
+        if (championInfo !== undefined && ArrayUtility.remove(this.infos, championInfo)) {
+            if (this !== oppositeInfos)
+                ArrayUtility.remove(oppositeInfos.infos, championInfo);
+            return true;
+        }
+        return false;
+    }
+}
+class GoodAgainstChampionInfoList extends ChampionInfoList {
+    add(targetChampion, title, details, score) {
+        const info = new ChampionInfo(this.champion, targetChampion, title, details, score);
+        return this.addChampionInfo(info, targetChampion.badAgainst);
+    }
+    remove(targetChampion) {
+        return this.removeChampionInfo(targetChampion, targetChampion.badAgainst);
+    }
+}
+class GoodWithChampionInfoList extends ChampionInfoList {
+    add(targetChampion, title, details, score) {
+        const info = new ChampionInfo(this.champion, targetChampion, title, details, score);
+        return this.addChampionInfo(info, targetChampion.goodWith);
+    }
+    remove(targetChampion) {
+        return this.removeChampionInfo(targetChampion, targetChampion.goodWith);
+    }
+}
+class BadAgainstChampionInfoList extends ChampionInfoList {
+    add(targetChampion, title, details, score) {
+        const info = new ChampionInfo(this.champion, targetChampion, title, details, score);
+        return this.addChampionInfo(info, targetChampion.goodAgainst);
+    }
+    remove(targetChampion) {
+        return this.removeChampionInfo(targetChampion, targetChampion.goodAgainst);
+    }
+}
+class ReadOnlyChampionInfoUI extends UIElement {
+    constructor(champion, info, title, color, w) {
+        super(ChampionInfo.load(champion, info, title, color, w));
+    }
+    static getGoodAgainst(champion, info, w) {
+        return new ReadOnlyChampionInfoUI(champion, info, "Good Against ", "#ffffff", w);
+    }
+    static getGoodWith(champion, info, w) {
+        return new ReadOnlyChampionInfoUI(champion, info, "Good With ", "#ffffff", w);
+    }
+    static getBadAgainst(champion, info, w) {
+        return new ReadOnlyChampionInfoUI(champion, info, "Bad Against ", "#ffffff", w);
+    }
+    static getBadWith(champion, info, w) {
+        return new ReadOnlyChampionInfoUI(champion, info, "Bad With ", "#ffffff", w);
+    }
+}
+class EditableChampionInfoUI extends UIElement {
+    constructor(champion, info, title, color, w, infos, parent) {
+        super(ChampionInfo.loadEditable(champion, info, title, color, w, infos, parent));
+    }
+    static getGoodAgainst(champion, info, w, infos, parent) {
+        return new EditableChampionInfoUI(champion, info, "Good Against ", "#ffffff", w, infos, parent);
+    }
+    static getGoodWith(champion, info, w, infos, parent) {
+        return new EditableChampionInfoUI(champion, info, "Good With ", "#ffffff", w, infos, parent);
+    }
+    static getBadAgainst(champion, info, w, infos, parent) {
+        return new EditableChampionInfoUI(champion, info, "Bad Against ", "#ffffff", w, infos, parent);
+    }
+    static getBadWith(champion, info, w, infos, parent) {
+        return new EditableChampionInfoUI(champion, info, "Bad With ", "#ffffff", w, infos, parent);
     }
 }
 class ChampionScore {
@@ -1110,83 +1246,87 @@ class ChampionUI extends ChampionSelectSetUI {
         this.redSideSelectedImage.modifyStyle.visibility = "visible";
     }
 }
-const miniPopUpInfo = new (class MiniPopUpInfo extends UIElement {
-    constructor() {
-        super(document.createElement('div'));
-        this.modifyStyle.position = "fixed";
-        this.modifyStyle.backgroundColor = "black";
-        this.modifyStyle.zIndex = "99";
-        this.modifyStyle.pointerEvents = "none";
-        this.modifyEvents.addOnPointerLeave(() => this.hide());
-        this.goodAgainstDiv = this.getBackground("BlueFadeOut.png", "GA");
-        this.goodWithDiv = this.getBackground("BlueFadeOut.png", "GW");
-        this.badAgainstDiv = this.getBackground("RedFadeOut.png", "BA");
-        PointerUtility.addOnMove(source => {
-            const pos = MathUtility.clampElement(source.position.x + 10, source.position.y + 10, this.modifyElement);
-            this.modifyStyle.left = pos.x + "px";
-            this.modifyStyle.top = pos.y + "px";
-        });
-        this.hide();
-    }
-    getBackground(imgName, title) {
-        const holderDiv = document.createElement('div');
-        this.modifyElement.appendChild(holderDiv);
-        holderDiv.style.display = "block";
-        holderDiv.style.backgroundImage = `url(${getImagePath(imgName)})`;
-        holderDiv.style.backgroundRepeat = "no-repeat";
-        holderDiv.style.backgroundSize = "100% 100%";
-        holderDiv.style.padding = "0px";
-        holderDiv.style.margin = "0px";
-        holderDiv.style.whiteSpace = "nowrap";
-        const dummyDiv = document.createElement('div');
-        holderDiv.appendChild(dummyDiv);
-        dummyDiv.style.height = "50px";
-        dummyDiv.style.width = "50px";
-        dummyDiv.style.padding = "0px";
-        dummyDiv.style.margin = "0px";
-        dummyDiv.style.display = "inline-block";
-        dummyDiv.style.position = "relative";
-        const textUI = getTextUI(title);
-        dummyDiv.appendChild(textUI.modifyElement);
-        textUI.modifyStyle.width = "100%";
-        textUI.modifyStyle.height = "100%";
-        textUI.modifyStyle.position = "absolute";
-        textUI.modifyStyle.textAlign = "center";
-        const div = document.createElement('div');
-        holderDiv.appendChild(div);
-        div.style.height = "50px";
-        div.style.minWidth = "50px";
-        div.style.display = "inline-block";
-        div.style.padding = "0px";
-        div.style.margin = "0px";
-        return div;
-    }
-    static getImage(champion) {
-        const img = new ImageUI();
-        img.modifyElement.src = champion.getImageSrcPath();
-        img.modifyStyle.width = "50px";
-        img.modifyStyle.height = "50px";
-        return img;
-    }
-    static loadImages(holder, infos) {
-        for (let info of infos) {
-            const img = this.getImage(info.champion);
-            holder.appendChild(img.modifyElement);
+var _a;
+const miniPopUpInfo = new (_a = class MiniPopUpInfo extends UIElement {
+        constructor() {
+            super(document.createElement('div'));
+            this.modifyStyle.position = "fixed";
+            this.modifyStyle.backgroundColor = "black";
+            this.modifyStyle.zIndex = "99";
+            this.modifyStyle.pointerEvents = "none";
+            this.modifyEvents.addOnPointerLeave(() => this.hide());
+            this.goodAgainstDiv = this.getBackground("BlueFadeOut.png", "GA");
+            this.goodWithDiv = this.getBackground("BlueFadeOut.png", "GW");
+            this.badAgainstDiv = this.getBackground("RedFadeOut.png", "BA");
+            PointerUtility.addOnMove(source => {
+                const pos = MathUtility.clampElement(source.position.x + 10, source.position.y + 10, this.modifyElement);
+                this.modifyStyle.left = pos.x + "px";
+                this.modifyStyle.top = pos.y + "px";
+            });
+            this.hide();
         }
-    }
-    display(champion) {
-        clearChildren(this.goodAgainstDiv);
-        clearChildren(this.goodWithDiv);
-        clearChildren(this.badAgainstDiv);
-        MiniPopUpInfo.loadImages(this.goodAgainstDiv, champion.goodAgainst);
-        MiniPopUpInfo.loadImages(this.goodWithDiv, champion.goodWith);
-        MiniPopUpInfo.loadImages(this.badAgainstDiv, champion.badAgainst);
-        this.modifyStyle.display = "block";
-    }
-    hide() {
-        this.modifyStyle.display = "none";
-    }
-})();
+        getBackground(imgName, title) {
+            const holderDiv = document.createElement('div');
+            this.modifyElement.appendChild(holderDiv);
+            holderDiv.style.display = "block";
+            holderDiv.style.backgroundImage = `url(${getImagePath(imgName)})`;
+            holderDiv.style.backgroundRepeat = "no-repeat";
+            holderDiv.style.backgroundSize = "100% 100%";
+            holderDiv.style.padding = "0px";
+            holderDiv.style.margin = "0px";
+            holderDiv.style.whiteSpace = "nowrap";
+            const dummyDiv = document.createElement('div');
+            holderDiv.appendChild(dummyDiv);
+            dummyDiv.style.height = MiniPopUpInfo.width + "px";
+            dummyDiv.style.width = MiniPopUpInfo.width + "px";
+            dummyDiv.style.padding = "0px";
+            dummyDiv.style.margin = "0px";
+            dummyDiv.style.display = "inline-block";
+            dummyDiv.style.position = "relative";
+            const textUI = TextUtility.getTextUI(title);
+            dummyDiv.appendChild(textUI.modifyElement);
+            textUI.modifyStyle.width = "100%";
+            textUI.modifyStyle.height = "100%";
+            textUI.modifyStyle.position = "absolute";
+            textUI.modifyStyle.textAlign = "center";
+            textUI.modifyStyle.fontSize = "12px";
+            const div = document.createElement('div');
+            holderDiv.appendChild(div);
+            div.style.height = MiniPopUpInfo.width + "px";
+            div.style.minWidth = MiniPopUpInfo.width + "px";
+            div.style.display = "inline-block";
+            div.style.padding = "0px";
+            div.style.margin = "0px";
+            return div;
+        }
+        static getImage(champion) {
+            const img = new ImageUI();
+            img.modifyElement.src = champion.getImageSrcPath();
+            img.modifyStyle.width = this.width + "px";
+            img.modifyStyle.height = this.width + "px";
+            return img;
+        }
+        static loadImages(champion, holder, infos) {
+            for (let info of infos.getInfos()) {
+                const img = this.getImage(info.getChampion(champion));
+                holder.appendChild(img.modifyElement);
+            }
+        }
+        display(champion) {
+            clearChildren(this.goodAgainstDiv);
+            clearChildren(this.goodWithDiv);
+            clearChildren(this.badAgainstDiv);
+            MiniPopUpInfo.loadImages(champion, this.goodAgainstDiv, champion.goodAgainst);
+            MiniPopUpInfo.loadImages(champion, this.goodWithDiv, champion.goodWith);
+            MiniPopUpInfo.loadImages(champion, this.badAgainstDiv, champion.badAgainst);
+            this.modifyStyle.display = "block";
+        }
+        hide() {
+            this.modifyStyle.display = "none";
+        }
+    },
+    _a.width = 40,
+    _a)();
 class GridLayoutUI extends LayoutUI {
     constructor() {
         super();
@@ -1226,7 +1366,7 @@ const Random = {
     getRandomArbitrary: (min, max) => Math.random() * (max - min) + min,
     getRandomInt: (min, max) => Math.floor(Math.random() * max) + min
 };
-const headerText = getTextUI("Champion Select", 4);
+const headerText = TextUtility.getTextUI("Champion Select", 4);
 headerText.modifyStyle.textAlign = "center";
 headerText.modifyStyle.fontSize = "32px";
 headerText.modifyStyle.margin = "0px";
@@ -1320,7 +1460,7 @@ headerText.modifyStyle.cursor = "default";
     numbersCheckDiv.style.top = "-15px";
     numbersCheckDiv.appendChild(numbersCheckInputField.modifyElement);
     numbersCheckInputField.modifyStyle.display = "inline-block";
-    const numbersCheckText = getTextUI();
+    const numbersCheckText = TextUtility.getTextUI();
     numbersCheckDiv.appendChild(numbersCheckText.modifyElement);
     numbersCheckText.modifyStyle.cursor = "default";
     numbersCheckText.modifyStyle.display = "inline-block";
@@ -1626,12 +1766,12 @@ headerText.modifyStyle.cursor = "default";
         }
         const phaseDiv = document.createElement('div');
         UI.body.appendChild(phaseDiv);
-        const phaseBtn = getTextUI("Phase");
+        phaseDiv.style.position = "relative";
+        const phaseBtn = ButtonUtility.getButton("Phase");
         phaseDiv.appendChild(phaseBtn.modifyElement);
-        phaseBtn.modifyStyle.display = "inline-block";
-        phaseBtn.modifyStyle.width = "100px";
         const phaseDropdown = document.createElement('select');
         phaseDiv.appendChild(phaseDropdown);
+        phaseDropdown.style.position = "absolute";
         (() => {
             const proPhaseOp = document.createElement('option');
             phaseDropdown.appendChild(proPhaseOp);
@@ -1718,17 +1858,12 @@ headerText.modifyStyle.cursor = "default";
             }
             nextSrcEvent();
         });
-        const resetBtn = getTextUI("Reset");
-        resetBtn.modifyStyle.width = "100px";
+        const resetBtn = ButtonUtility.getButton("Reset");
         resetBtn.modifyEvents.addOnClick(() => reset());
         const downloadDiv = document.createElement('div');
         UI.body.appendChild(downloadDiv);
-        const downloadDataBtn = new ButtonUI("Save As", 100, 30);
+        const downloadDataBtn = ButtonUtility.getButton("Save As", 100, 30);
         downloadDiv.appendChild(downloadDataBtn.modifyElement);
-        downloadDataBtn.setColor("rgb(0, 0, 0)");
-        downloadDataBtn.setHoverColor("rgb(100, 100, 100)");
-        downloadDataBtn.modifyText.modifyStyle.color = "white";
-        downloadDataBtn.modifyStyle.display = "inline-block";
         const downloadDataInputField = new InputFieldUI();
         downloadDiv.appendChild(downloadDataInputField.modifyElement);
         downloadDataInputField.modifyStyle.position = "relative";
@@ -1742,7 +1877,7 @@ headerText.modifyStyle.cursor = "default";
             refDownload.download = fileName + ".json";
             refDownload.click();
         });
-        const loadDataTextUI = getTextUI("Load Data: ");
+        const loadDataTextUI = TextUtility.getTextUI("Load Data: ");
         UI.body.appendChild(loadDataTextUI.modifyElement);
         const loadDataInput = new InputFieldUI();
         loadDataTextUI.modifyElement.appendChild(loadDataInput.modifyElement);
@@ -1759,1046 +1894,11 @@ headerText.modifyStyle.cursor = "default";
                 });
             }
         });
+        const clearDataBtn = ButtonUtility.getButton("Clear");
+        clearDataBtn.modifyEvents.addOnClick(() => ChampionData.clear());
     })();
 })();
 (() => {
-    const aatrox = Champion.get("Aatrox"), ahri = Champion.get("Ahri"), akali = Champion.get("Akali"), alistar = Champion.get("Alistar"), amumu = Champion.get("Amumu"), anivia = Champion.get("Anivia"), annie = Champion.get("Annie"), aphelios = Champion.get("Aphelios"), ashe = Champion.get("Ashe"), aurelionSol = Champion.get("Aurelion Sol"), azir = Champion.get("Azir"), bard = Champion.get("Bard"), blitzcrank = Champion.get("Blitzcrank"), brand = Champion.get("Brand"), braum = Champion.get("Braum"), caitlyn = Champion.get("Caitlyn"), camille = Champion.get("Camille"), cassiopeia = Champion.get("Cassiopeia"), choGath = Champion.get("Cho'Gath"), corki = Champion.get("Corki"), darius = Champion.get("Darius"), diana = Champion.get("Diana"), drMundo = Champion.get("Dr. Mundo"), draven = Champion.get("Draven"), ekko = Champion.get("Ekko"), elise = Champion.get("Elise"), evelynn = Champion.get("Evelynn"), ezreal = Champion.get("Ezreal"), fiddlesticks = Champion.get("Fiddlesticks"), fiora = Champion.get("Fiora"), fizz = Champion.get("Fizz"), galio = Champion.get("Galio"), gangplank = Champion.get("Gangplank"), garen = Champion.get("Garen"), gnar = Champion.get("Gnar"), gragas = Champion.get("Gragas"), graves = Champion.get("Graves"), hecarim = Champion.get("Hecarim"), heimerdinger = Champion.get("Heimerdinger"), illaoi = Champion.get("Illaoi"), irelia = Champion.get("Irelia"), ivern = Champion.get("Ivern"), janna = Champion.get("Janna"), jarvanIV = Champion.get("Jarvan IV"), jax = Champion.get("Jax"), jayce = Champion.get("Jayce"), jhin = Champion.get("Jhin"), jinx = Champion.get("Jinx"), kaiSa = Champion.get("Kai'Sa"), kalista = Champion.get("Kalista"), karma = Champion.get("Karma"), karthus = Champion.get("Karthus"), kassadin = Champion.get("Kassadin"), katarina = Champion.get("Katarina"), kayle = Champion.get("Kayle"), kayn = Champion.get("Kayn"), kennen = Champion.get("Kennen"), khaZix = Champion.get("Kha'Zix"), kindred = Champion.get("Kindred"), kled = Champion.get("Kled"), kogMaw = Champion.get("Kog'Maw"), leBlanc = Champion.get("LeBlanc"), leeSin = Champion.get("Lee Sin"), leona = Champion.get("Leona"), lissandra = Champion.get("Lissandra"), lucian = Champion.get("Lucian"), lulu = Champion.get("Lulu"), lux = Champion.get("Lux"), malphite = Champion.get("Malphite"), malzahar = Champion.get("Malzahar"), maokai = Champion.get("Maokai"), masterYi = Champion.get("Master Yi"), missFortune = Champion.get("Miss Fortune"), mordekaiser = Champion.get("Mordekaiser"), morgana = Champion.get("Morgana"), nami = Champion.get("Nami"), nasus = Champion.get("Nasus"), nautilus = Champion.get("Nautilus"), neeko = Champion.get("Neeko"), nidalee = Champion.get("Nidalee"), nocturne = Champion.get("Nocturne"), nunu = Champion.get("Nunu"), olaf = Champion.get("Olaf"), orianna = Champion.get("Orianna"), ornn = Champion.get("Ornn"), pantheon = Champion.get("Pantheon"), poppy = Champion.get("Poppy"), pyke = Champion.get("Pyke"), qiyana = Champion.get("Qiyana"), quinn = Champion.get("Quinn"), rakan = Champion.get("Rakan"), rammus = Champion.get("Rammus"), rekSai = Champion.get("Rek'Sai"), renekton = Champion.get("Renekton"), rengar = Champion.get("Rengar"), riven = Champion.get("Riven"), rumble = Champion.get("Rumble"), ryze = Champion.get("Ryze"), sejuani = Champion.get("Sejuani"), senna = Champion.get("Senna"), sett = Champion.get("Sett"), shaco = Champion.get("Shaco"), shen = Champion.get("Shen"), shyvana = Champion.get("Shyvana"), singed = Champion.get("Singed"), sion = Champion.get("Sion"), sivir = Champion.get("Sivir"), skarner = Champion.get("Skarner"), sona = Champion.get("Sona"), soraka = Champion.get("Soraka"), swain = Champion.get("Swain"), sylas = Champion.get("Sylas"), syndra = Champion.get("Syndra"), tahmKench = Champion.get("Tahm Kench"), taliyah = Champion.get("Taliyah"), talon = Champion.get("Talon"), taric = Champion.get("Taric"), teemo = Champion.get("Teemo"), thresh = Champion.get("Thresh"), tristana = Champion.get("Tristana"), trundle = Champion.get("Trundle"), tryndamere = Champion.get("Tryndamere"), twistedFate = Champion.get("Twisted Fate"), twitch = Champion.get("Twitch"), udyr = Champion.get("Udyr"), urgot = Champion.get("Urgot"), varus = Champion.get("Varus"), vayne = Champion.get("Vayne"), veigar = Champion.get("Veigar"), velKoz = Champion.get("Vel'Koz"), vi = Champion.get("Vi"), viktor = Champion.get("Viktor"), vladimir = Champion.get("Vladimir"), volibear = Champion.get("Volibear"), warwick = Champion.get("Warwick"), wukong = Champion.get("Wukong"), xayah = Champion.get("Xayah"), xerath = Champion.get("Xerath"), xinZhao = Champion.get("Xin Zhao"), yasuo = Champion.get("Yasuo"), yorick = Champion.get("Yorick"), yuumi = Champion.get("Yuumi"), zac = Champion.get("Zac"), zed = Champion.get("Zed"), ziggs = Champion.get("Ziggs"), zilean = Champion.get("Zilean"), zoe = Champion.get("Zoe"), zyra = Champion.get("Zyra");
-    const toDoDescription = "TO DO: details!";
-    aatrox.role = Role.Top;
-    aatrox.civilization = Civilization.Darkness;
-    aatrox.mode = Mode.Tank | Mode.ADC | Mode.PowerEngager;
-    aatrox.addGoodAgainst(gangplank, toDoDescription);
-    aatrox.addGoodAgainst(darius, toDoDescription);
-    aatrox.addGoodAgainst(galio, toDoDescription);
-    aatrox.addGoodAgainst(viktor, toDoDescription);
-    aatrox.addGoodAgainst(azir, toDoDescription);
-    aatrox.addGoodAgainst(malphite, toDoDescription);
-    aatrox.addGoodAgainst(malzahar, toDoDescription);
-    aatrox.addGoodWith(gnar, toDoDescription);
-    aatrox.addGoodWith(yasuo, toDoDescription);
-    aatrox.addGoodWith(azir, toDoDescription);
-    ahri.role = Role.Middle;
-    ahri.civilization = Civilization.Fire;
-    ahri.mode = Mode.APC;
-    ahri.addGoodAgainst(choGath, toDoDescription);
-    ahri.addGoodAgainst(azir, toDoDescription);
-    ahri.addGoodAgainst(viktor, toDoDescription);
-    ahri.addGoodWith(jax, toDoDescription);
-    ahri.addGoodWith(riven, toDoDescription);
-    ahri.addGoodWith(irelia, toDoDescription);
-    akali.role = Role.Middle;
-    akali.civilization = Civilization.Fire;
-    akali.mode = Mode.ADC | Mode.Burster | Mode.Sly | Mode.PowerEngager;
-    akali.addGoodAgainst(nasus, toDoDescription);
-    akali.addGoodAgainst(garen, toDoDescription);
-    akali.addGoodAgainst(poppy, toDoDescription);
-    akali.addGoodAgainst(aurelionSol, "Akali will get up in the face of Aurelion Sol and make it difficult for him to get off. She can hide in her shroud and to avoid being blasted away, as long as she makes sure to avoid his stars from revealing her position. Her ultimate can close the gap and so can her shuriken.");
-    akali.addGoodWith(diana, toDoDescription);
-    akali.addGoodWith(leBlanc, toDoDescription);
-    akali.addGoodWith(katarina, toDoDescription);
-    amumu.role = Role.Jungle;
-    amumu.civilization = Civilization.Fire;
-    amumu.mode = Mode.Tank | Mode.Utility | Mode.APC;
-    amumu.addGoodAgainst(graves, toDoDescription);
-    amumu.addGoodAgainst(shyvana, toDoDescription);
-    amumu.addGoodAgainst(leeSin, toDoDescription);
-    amumu.addGoodWith(katarina, toDoDescription);
-    amumu.addGoodWith(fiddlesticks, toDoDescription);
-    amumu.addGoodWith(morgana, toDoDescription);
-    anivia.role = Role.Middle;
-    anivia.civilization = Civilization.Water | Civilization.Nature;
-    anivia.mode = Mode.APC;
-    anivia.addGoodAgainst(kayle, toDoDescription);
-    anivia.addGoodAgainst(azir, toDoDescription);
-    anivia.addGoodAgainst(akali, toDoDescription);
-    anivia.addGoodWith(jarvanIV, toDoDescription);
-    anivia.addGoodWith(drMundo, toDoDescription);
-    anivia.addGoodWith(vayne, toDoDescription);
-    annie.role = Role.Middle;
-    annie.civilization = Civilization.Fire;
-    annie.mode = Mode.APC;
-    annie.addGoodAgainst(diana, toDoDescription);
-    annie.addGoodAgainst(jayce, toDoDescription);
-    annie.addGoodAgainst(viktor, toDoDescription);
-    annie.addGoodWith(jinx, toDoDescription);
-    annie.addGoodWith(amumu, toDoDescription);
-    annie.addGoodWith(lucian, toDoDescription);
-    aphelios.role = Role.Bottom;
-    aphelios.civilization = Civilization.Nature | Civilization.Water | Civilization.Light;
-    aphelios.mode = Mode.ADC | Mode.Utility | Mode.SplitPusher | Mode.EpicKiller;
-    ashe.role = Role.Bottom;
-    ashe.civilization = Civilization.Water | Civilization.Light;
-    ashe.mode = Mode.ADC;
-    ashe.addGoodAgainst(corki, toDoDescription);
-    ashe.addGoodAgainst(lucian, toDoDescription);
-    ashe.addGoodAgainst(sivir, toDoDescription);
-    ashe.addGoodWith(leona, toDoDescription);
-    ashe.addGoodWith(janna, toDoDescription);
-    ashe.addGoodWith(thresh, toDoDescription);
-    aurelionSol.role = Role.Top | Role.Middle;
-    aurelionSol.civilization = Civilization.Water | Civilization.Nature;
-    aurelionSol.mode = Mode.APC;
-    aurelionSol.addGoodAgainst(zoe, "Zoe wants to keep her distance? So does Aurelion Sol does too!");
-    aurelionSol.addGoodAgainst(taliyah, "Taliyah can get Aurelion Sol in a bad position with her earth bump, but Aurelion Sol benefits from his stars as he can kit while dealing damage.");
-    aurelionSol.addGoodAgainst(heimerdinger, "Heimerdinger's turrets cannot reach Aurelion Sol when his stars are outter-orbiting, Aurelion Sol does not need to get into the range of Heimerdinger's turrets to farm. Aurelion Sol can kit around easily while dealing damage with his stars, dodging any energized rays the turrets might throw at you, and his rockets, and his stun. Can easily escape from his ultimate sentry as well. ");
-    aurelionSol.addGoodWith(morgana, "Morgana keeps the enemies at bay with her skillshot and ultimate. Spell shield may not be so useful on Aurelion Sol as it is not wise for him to get close to the enemies but can let him heard engage to clean up or chase down.");
-    azir.role = Role.Middle;
-    azir.civilization = Civilization.Nature | Civilization.Water;
-    azir.mode = Mode.APC;
-    azir.addGoodAgainst(yasuo, "Azir can ultimate away Yasuo if he gets too close. Be careful for his windshield when thrusting your soliders as it can halt their movement. Other than that, there should be no worry.");
-    azir.addGoodAgainst(gangplank, "Azir's basic attack has no travel time, it is faster than Gangplank's gun, use this to destroy barrels before he can make them explode. Azir also like to keep his distance, so barrels should not be much of a problem as long as Azir can kit well.");
-    azir.addGoodAgainst(heimerdinger, "Azir can send his soliders to clear Heimerdinger's turrets.");
-    azir.addGoodWith(teemo, "Azir rather use his soliders to attack, Teemo's blind is ineffective. Teemo's shrooms can be annoying, Azir should equip himself with a red flare.");
-    azir.addGoodWith(yasuo, "Azir can sending multiple enemies flying with his ultimate, perfect for Yasuo to follow up.");
-    azir.addGoodWith(alistar, "Alistar will make Azir's life easier with his stuns and knockups. Alistar can push away enemies if they get too close or direct them into the soliders with a headbutt. He can also smash to send enemies flying which can be followed up with Azir's ultimate.");
-    bard.role = Role.Support;
-    bard.civilization = Civilization.Zero;
-    bard.mode = Mode.Utility | Mode.APC;
-    bard.addGoodAgainst(veigar, toDoDescription);
-    bard.addGoodAgainst(nautilus, toDoDescription);
-    bard.addGoodAgainst(braum, toDoDescription);
-    bard.addGoodWith(sion, toDoDescription);
-    bard.addGoodWith(heimerdinger, toDoDescription);
-    bard.addGoodWith(jhin, toDoDescription);
-    blitzcrank.role = Role.Support;
-    blitzcrank.civilization = Civilization.Fire;
-    blitzcrank.mode = Mode.Utility | Mode.APC;
-    blitzcrank.addGoodAgainst(lux, toDoDescription);
-    blitzcrank.addGoodAgainst(zyra, toDoDescription);
-    blitzcrank.addGoodAgainst(nami, toDoDescription);
-    blitzcrank.addGoodWith(jinx, toDoDescription);
-    blitzcrank.addGoodWith(vayne, toDoDescription);
-    blitzcrank.addGoodWith(ezreal, toDoDescription);
-    brand.role = Role.Middle | Role.Support;
-    brand.civilization = Civilization.Water | Civilization.Nature;
-    brand.mode = Mode.Utility | Mode.APC;
-    brand.addGoodAgainst(velKoz, toDoDescription);
-    brand.addGoodAgainst(rakan, toDoDescription);
-    brand.addGoodAgainst(braum, toDoDescription);
-    brand.addGoodWith(amumu, toDoDescription);
-    brand.addGoodWith(sona, toDoDescription);
-    brand.addGoodWith(maokai, toDoDescription);
-    braum.role = Role.Support;
-    braum.civilization = Civilization.Zero;
-    braum.mode = Mode.Utility | Mode.Tank;
-    braum.addGoodAgainst(fiddlesticks, toDoDescription);
-    braum.addGoodAgainst(karma, toDoDescription);
-    braum.addGoodAgainst(lux, toDoDescription);
-    braum.addGoodWith(lucian, toDoDescription);
-    braum.addGoodWith(ezreal, toDoDescription);
-    braum.addGoodWith(twitch, toDoDescription);
-    caitlyn.role = Role.Bottom;
-    caitlyn.civilization = Civilization.Water;
-    caitlyn.mode = Mode.ADC;
-    caitlyn.addGoodAgainst(ezreal, toDoDescription);
-    caitlyn.addGoodAgainst(ziggs, toDoDescription);
-    caitlyn.addGoodAgainst(xayah, toDoDescription);
-    caitlyn.addGoodWith(leona, toDoDescription);
-    caitlyn.addGoodWith(thresh, toDoDescription);
-    caitlyn.addGoodWith(nami, toDoDescription);
-    camille.role = Role.Top;
-    camille.civilization = Civilization.Fire;
-    camille.mode = Mode.Tank | Mode.ADC;
-    camille.addGoodAgainst(cassiopeia, toDoDescription);
-    camille.addGoodAgainst(garen, toDoDescription);
-    camille.addGoodAgainst(drMundo, toDoDescription);
-    camille.addGoodWith(bard, toDoDescription);
-    camille.addGoodWith(thresh, toDoDescription);
-    camille.addGoodWith(galio, toDoDescription);
-    cassiopeia.role = Role.Middle;
-    cassiopeia.civilization = Civilization.Water | Civilization.Nature;
-    cassiopeia.mode = Mode.APC | Mode.Utility;
-    cassiopeia.addGoodAgainst(ryze, toDoDescription);
-    cassiopeia.addGoodAgainst(azir, toDoDescription);
-    cassiopeia.addGoodAgainst(zed, toDoDescription);
-    cassiopeia.addGoodWith(teemo, toDoDescription);
-    cassiopeia.addGoodWith(singed, toDoDescription);
-    cassiopeia.addGoodWith(yorick, toDoDescription);
-    choGath.role = Role.Top | Role.Middle;
-    choGath.civilization = Civilization.Nature;
-    choGath.mode = Mode.Tank | Mode.APC | Mode.Utility | Mode.EpicKiller | Mode.Scaler;
-    choGath.addGoodAgainst(galio, toDoDescription);
-    choGath.addGoodAgainst(pantheon, toDoDescription);
-    choGath.addGoodAgainst(gragas, toDoDescription);
-    choGath.addGoodWith(yasuo, toDoDescription);
-    choGath.addGoodWith(lulu, toDoDescription);
-    choGath.addGoodWith(aatrox, toDoDescription);
-    corki.role = Role.Bottom;
-    corki.civilization = Civilization.Fire | Civilization.Water;
-    corki.mode = Mode.ADC;
-    corki.addGoodAgainst(diana, toDoDescription);
-    corki.addGoodAgainst(ryze, toDoDescription);
-    corki.addGoodAgainst(ziggs, toDoDescription);
-    corki.addGoodWith(leona, toDoDescription);
-    corki.addGoodWith(thresh, toDoDescription);
-    corki.addGoodWith(blitzcrank, toDoDescription);
-    darius.role = Role.Top;
-    darius.mode = Mode.ADC | Mode.Tank;
-    darius.addGoodAgainst(nautilus, toDoDescription);
-    darius.addGoodAgainst(galio, toDoDescription);
-    darius.addGoodAgainst(choGath, toDoDescription);
-    darius.addGoodWith(draven, toDoDescription);
-    darius.addGoodWith(olaf, toDoDescription);
-    darius.addGoodWith(fiora, toDoDescription);
-    diana.role = Role.Middle;
-    diana.mode = Mode.APC;
-    diana.addGoodAgainst(zed, toDoDescription);
-    diana.addGoodAgainst(leBlanc, toDoDescription);
-    diana.addGoodAgainst(lux, toDoDescription);
-    diana.addGoodAgainst(aurelionSol, "");
-    diana.addGoodWith(akali, toDoDescription);
-    diana.addGoodWith(yasuo, toDoDescription);
-    diana.addGoodWith(kassadin, toDoDescription);
-    drMundo.role = Role.Top | Role.Jungle;
-    drMundo.mode = Mode.Tank;
-    drMundo.addGoodAgainst(darius, toDoDescription);
-    drMundo.addGoodAgainst(teemo, toDoDescription);
-    drMundo.addGoodAgainst(irelia, toDoDescription);
-    drMundo.addGoodWith(anivia, toDoDescription);
-    drMundo.addGoodWith(olaf, toDoDescription);
-    drMundo.addGoodWith(jax, toDoDescription);
-    draven.role = Role.Bottom;
-    draven.mode = Mode.ADC;
-    draven.addGoodAgainst(corki, toDoDescription);
-    draven.addGoodAgainst(sivir, toDoDescription);
-    draven.addGoodAgainst(lucian, toDoDescription);
-    draven.addGoodWith(thresh, toDoDescription);
-    draven.addGoodWith(darius, toDoDescription);
-    draven.addGoodWith(leona, toDoDescription);
-    ekko.role = Role.Middle | Role.Jungle;
-    ekko.mode = Mode.Tank | Mode.APC;
-    ekko.addGoodAgainst(azir, toDoDescription);
-    ekko.addGoodAgainst(karma, toDoDescription);
-    ekko.addGoodAgainst(zed, toDoDescription);
-    ekko.addGoodWith(galio, toDoDescription);
-    ekko.addGoodWith(bard, toDoDescription);
-    ekko.addGoodWith(lulu, toDoDescription);
-    elise.role = Role.Jungle;
-    elise.mode = Mode.APC | Mode.Utility;
-    elise.addGoodAgainst(choGath, toDoDescription);
-    elise.addGoodAgainst(rekSai, toDoDescription);
-    elise.addGoodAgainst(udyr, toDoDescription);
-    elise.addGoodWith(rengar, toDoDescription);
-    elise.addGoodWith(blitzcrank, toDoDescription);
-    elise.addGoodWith(karma, toDoDescription);
-    evelynn.role = Role.Jungle;
-    evelynn.mode = Mode.ADC | Mode.Burster | Mode.Sly;
-    evelynn.addGoodAgainst(graves, toDoDescription);
-    evelynn.addGoodAgainst(skarner, toDoDescription);
-    evelynn.addGoodAgainst(nidalee, toDoDescription);
-    evelynn.addGoodWith(choGath, toDoDescription);
-    evelynn.addGoodWith(shen, toDoDescription);
-    evelynn.addGoodWith(orianna, toDoDescription);
-    ezreal.role = Role.Bottom;
-    ezreal.addGoodAgainst(varus, toDoDescription);
-    ezreal.addGoodAgainst(lucian, toDoDescription);
-    ezreal.addGoodAgainst(kalista, toDoDescription);
-    ezreal.addGoodWith(sona, toDoDescription);
-    ezreal.addGoodWith(taric, toDoDescription);
-    ezreal.addGoodWith(leona, toDoDescription);
-    fiddlesticks.role = Role.Support | Role.Jungle;
-    fiddlesticks.addGoodAgainst(graves, toDoDescription);
-    fiddlesticks.addGoodAgainst(amumu, toDoDescription);
-    fiddlesticks.addGoodAgainst(rekSai, toDoDescription);
-    fiddlesticks.addGoodWith(amumu, toDoDescription);
-    fiddlesticks.addGoodWith(galio, toDoDescription);
-    fiddlesticks.addGoodWith(kennen, toDoDescription);
-    fiora.role = Role.Top;
-    fiora.addGoodAgainst(galio, toDoDescription);
-    fiora.addGoodAgainst(choGath, toDoDescription);
-    fiora.addGoodAgainst(nautilus, toDoDescription);
-    fiora.addGoodWith(darius, toDoDescription);
-    fiora.addGoodWith(volibear, toDoDescription);
-    fiora.addGoodWith(ahri, toDoDescription);
-    fizz.role = Role.Middle;
-    fizz.addGoodAgainst(ryze, toDoDescription);
-    fizz.addGoodAgainst(aurelionSol, toDoDescription);
-    fizz.addGoodAgainst(syndra, toDoDescription);
-    fizz.addGoodWith(talon, toDoDescription);
-    fizz.addGoodWith(amumu, toDoDescription);
-    fizz.addGoodWith(nami, toDoDescription);
-    galio.role = Role.Top;
-    galio.addGoodAgainst(drMundo, toDoDescription);
-    galio.addGoodAgainst(poppy, toDoDescription);
-    galio.addGoodAgainst(mordekaiser, toDoDescription);
-    galio.addGoodWith(katarina, toDoDescription);
-    galio.addGoodWith(wukong, toDoDescription);
-    galio.addGoodWith(nunu, toDoDescription);
-    gangplank.role = Role.Top;
-    gangplank.addGoodAgainst(lissandra, toDoDescription);
-    gangplank.addGoodAgainst(galio, toDoDescription);
-    gangplank.addGoodAgainst(shen, toDoDescription);
-    gangplank.addGoodWith(amumu, toDoDescription);
-    gangplank.addGoodWith(nunu, toDoDescription);
-    gangplank.addGoodWith(twistedFate, toDoDescription);
-    garen.role = Role.Top;
-    garen.addGoodAgainst(malphite, toDoDescription);
-    garen.addGoodAgainst(shen, toDoDescription);
-    garen.addGoodAgainst(gangplank, toDoDescription);
-    garen.addGoodWith(lux, toDoDescription);
-    garen.addGoodWith(darius, toDoDescription);
-    garen.addGoodWith(aatrox, toDoDescription);
-    gnar.role = Role.Top;
-    gnar.addGoodAgainst(garen, toDoDescription);
-    gnar.addGoodAgainst(yorick, toDoDescription);
-    gnar.addGoodAgainst(xinZhao, toDoDescription);
-    gnar.addGoodWith(aatrox, toDoDescription);
-    gnar.addGoodWith(jarvanIV, toDoDescription);
-    gnar.addGoodWith(braum, toDoDescription);
-    gragas.role = Role.Jungle;
-    gragas.addGoodAgainst(diana, toDoDescription);
-    gragas.addGoodAgainst(leeSin, toDoDescription);
-    gragas.addGoodAgainst(udyr, toDoDescription);
-    gragas.addGoodWith(ashe, toDoDescription);
-    gragas.addGoodWith(malphite, toDoDescription);
-    gragas.addGoodWith(yasuo, toDoDescription);
-    graves.role = Role.Middle | Role.Jungle;
-    graves.addGoodAgainst(shyvana, toDoDescription);
-    graves.addGoodAgainst(olaf, toDoDescription);
-    graves.addGoodAgainst(xinZhao, toDoDescription);
-    graves.addGoodWith(taric, toDoDescription);
-    graves.addGoodWith(leona, toDoDescription);
-    graves.addGoodWith(thresh, toDoDescription);
-    hecarim.role = Role.Jungle;
-    hecarim.addGoodAgainst(wukong, toDoDescription);
-    hecarim.addGoodAgainst(graves, toDoDescription);
-    hecarim.addGoodAgainst(rekSai, toDoDescription);
-    hecarim.addGoodWith(orianna, toDoDescription);
-    hecarim.addGoodWith(zilean, toDoDescription);
-    hecarim.addGoodWith(malphite, toDoDescription);
-    heimerdinger.role = Role.Middle | Role.Bottom;
-    heimerdinger.addGoodAgainst(illaoi, toDoDescription);
-    heimerdinger.addGoodAgainst(camille, toDoDescription);
-    heimerdinger.addGoodAgainst(shen, toDoDescription);
-    heimerdinger.addGoodWith(blitzcrank, toDoDescription);
-    heimerdinger.addGoodWith(thresh, toDoDescription);
-    heimerdinger.addGoodWith(vi, toDoDescription);
-    illaoi.role = Role.Top;
-    illaoi.addGoodAgainst(galio, toDoDescription);
-    illaoi.addGoodAgainst(shen, toDoDescription);
-    illaoi.addGoodAgainst(jayce, toDoDescription);
-    illaoi.addGoodWith(galio, toDoDescription);
-    illaoi.addGoodWith(camille, toDoDescription);
-    illaoi.addGoodWith(lulu, toDoDescription);
-    irelia.role = Role.Top | Role.Middle;
-    irelia.addGoodAgainst(nasus, toDoDescription);
-    irelia.addGoodAgainst(poppy, toDoDescription);
-    irelia.addGoodAgainst(rengar, toDoDescription);
-    irelia.addGoodWith(riven, toDoDescription);
-    irelia.addGoodWith(ahri, toDoDescription);
-    irelia.addGoodWith(malphite, toDoDescription);
-    ivern.role = Role.Jungle;
-    ivern.addGoodAgainst(udyr, toDoDescription);
-    ivern.addGoodAgainst(fiddlesticks, toDoDescription);
-    ivern.addGoodAgainst(shyvana, toDoDescription);
-    ivern.addGoodWith(yasuo, toDoDescription);
-    ivern.addGoodWith(xayah, toDoDescription);
-    ivern.addGoodWith(riven, toDoDescription);
-    janna.role = Role.Support;
-    janna.addGoodAgainst(annie, toDoDescription);
-    janna.addGoodAgainst(nautilus, toDoDescription);
-    janna.addGoodAgainst(taric, toDoDescription);
-    janna.addGoodWith(yasuo, toDoDescription);
-    janna.addGoodWith(draven, toDoDescription);
-    janna.addGoodWith(ashe, toDoDescription);
-    jarvanIV.role = Role.Jungle;
-    jarvanIV.addGoodAgainst(rekSai, toDoDescription);
-    jarvanIV.addGoodAgainst(olaf, toDoDescription);
-    jarvanIV.addGoodAgainst(xinZhao, toDoDescription);
-    jarvanIV.addGoodWith(orianna, toDoDescription);
-    jarvanIV.addGoodWith(gnar, toDoDescription);
-    jarvanIV.addGoodWith(katarina, toDoDescription);
-    jax.role = Role.Top;
-    jax.addGoodAgainst(tahmKench, toDoDescription);
-    jax.addGoodAgainst(nautilus, toDoDescription);
-    jax.addGoodAgainst(ekko, toDoDescription);
-    jax.addGoodWith(ahri, toDoDescription);
-    jax.addGoodWith(pantheon, toDoDescription);
-    jax.addGoodWith(teemo, toDoDescription);
-    jayce.role = Role.Top;
-    jayce.addGoodAgainst(drMundo, toDoDescription);
-    jayce.addGoodAgainst(urgot, toDoDescription);
-    jayce.addGoodAgainst(cassiopeia, toDoDescription);
-    jayce.addGoodWith(nidalee, toDoDescription);
-    jayce.addGoodWith(skarner, toDoDescription);
-    jayce.addGoodWith(leona, toDoDescription);
-    jhin.role = Role.Bottom;
-    jhin.addGoodAgainst(ezreal, toDoDescription);
-    jhin.addGoodAgainst(corki, toDoDescription);
-    jhin.addGoodAgainst(lucian, toDoDescription);
-    jhin.addGoodWith(leona, toDoDescription);
-    jhin.addGoodWith(bard, toDoDescription);
-    jhin.addGoodWith(thresh, toDoDescription);
-    jinx.role = Role.Bottom;
-    jinx.addGoodAgainst(sivir, toDoDescription);
-    jinx.addGoodAgainst(kalista, toDoDescription);
-    jinx.addGoodAgainst(ashe, toDoDescription);
-    jinx.addGoodWith(leona, toDoDescription);
-    jinx.addGoodWith(blitzcrank, toDoDescription);
-    jinx.addGoodWith(thresh, toDoDescription);
-    kaiSa.role = Role.Bottom;
-    kaiSa.addGoodAgainst(corki, toDoDescription);
-    kaiSa.addGoodAgainst(kalista, toDoDescription);
-    kaiSa.addGoodAgainst(ashe, toDoDescription);
-    kaiSa.addGoodWith(leona, toDoDescription);
-    kaiSa.addGoodWith(thresh, toDoDescription);
-    kaiSa.addGoodWith(zac, toDoDescription);
-    kalista.role = Role.Bottom;
-    kalista.addGoodAgainst(corki, toDoDescription);
-    kalista.addGoodAgainst(lucian, toDoDescription);
-    kalista.addGoodAgainst(varus, toDoDescription);
-    kalista.addGoodWith(tahmKench, toDoDescription);
-    kalista.addGoodWith(alistar, toDoDescription);
-    kalista.addGoodWith(thresh, toDoDescription);
-    karma.role = Role.Middle | Role.Support;
-    karma.addGoodAgainst(veigar, toDoDescription);
-    karma.addGoodAgainst(zilean, toDoDescription);
-    karma.addGoodAgainst(morgana, toDoDescription);
-    karma.addGoodWith(jinx, toDoDescription);
-    karma.addGoodWith(ezreal, toDoDescription);
-    karma.addGoodWith(vayne, toDoDescription);
-    karthus.role = Role.Middle | Role.Jungle;
-    karthus.addGoodAgainst(yasuo, toDoDescription);
-    karthus.addGoodAgainst(twistedFate, toDoDescription);
-    karthus.addGoodAgainst(kassadin, toDoDescription);
-    karthus.addGoodWith(kayle, toDoDescription);
-    karthus.addGoodWith(amumu, toDoDescription);
-    karthus.addGoodWith(yorick, toDoDescription);
-    kassadin.role = Role.Middle;
-    kassadin.addGoodAgainst(azir, "Kassadin can close the gap between Azir and him very easily with his ultimate. If Azir uses his ultimate to get Kassadin off, Kassadin can use his ultimate again after a short delay to teleport right back to him.");
-    kassadin.addGoodAgainst(karma, toDoDescription);
-    kassadin.addGoodAgainst(leBlanc, toDoDescription);
-    kassadin.addGoodAgainst(aurelionSol, "Kassadin will get near Aurelion Sol, exactly what he does not want. He also has a mage shield protecting his from some star damage. Kassadin will usually stay within the inner-layer of stars, so Aurelion Sol better be running!");
-    kassadin.addGoodWith(diana, toDoDescription);
-    kassadin.addGoodWith(ahri, toDoDescription);
-    kassadin.addGoodWith(leeSin, toDoDescription);
-    katarina.role = Role.Middle;
-    katarina.addGoodAgainst(ryze, toDoDescription);
-    katarina.addGoodAgainst(syndra, toDoDescription);
-    katarina.addGoodWith(amumu, toDoDescription);
-    katarina.addGoodWith(galio, toDoDescription);
-    katarina.addGoodWith(morgana, toDoDescription);
-    kayle.role = Role.Top;
-    kayle.addGoodAgainst(garen, toDoDescription);
-    kayle.addGoodAgainst(poppy, toDoDescription);
-    kayle.addGoodAgainst(galio, toDoDescription);
-    kayle.addGoodWith(ezreal, toDoDescription);
-    kayle.addGoodWith(katarina, toDoDescription);
-    kayle.addGoodWith(karthus, toDoDescription);
-    kennen.role = Role.Top;
-    kennen.addGoodAgainst(shen, toDoDescription);
-    kennen.addGoodAgainst(quinn, toDoDescription);
-    kennen.addGoodAgainst(mordekaiser, toDoDescription);
-    kennen.addGoodWith(amumu, toDoDescription);
-    kennen.addGoodWith(vladimir, toDoDescription);
-    kennen.addGoodWith(fiddlesticks, toDoDescription);
-    khaZix.role = Role.Jungle;
-    khaZix.addGoodAgainst(diana, toDoDescription);
-    khaZix.addGoodAgainst(graves, toDoDescription);
-    khaZix.addGoodAgainst(olaf, toDoDescription);
-    khaZix.addGoodWith(rengar, toDoDescription);
-    khaZix.addGoodWith(xinZhao, toDoDescription);
-    khaZix.addGoodWith(nasus, toDoDescription);
-    kindred.role = Role.Jungle;
-    kindred.addGoodAgainst(rekSai, toDoDescription);
-    kindred.addGoodAgainst(xinZhao, toDoDescription);
-    kindred.addGoodAgainst(fiddlesticks, toDoDescription);
-    kindred.addGoodWith(galio, toDoDescription);
-    kindred.addGoodWith(sion, toDoDescription);
-    kindred.addGoodWith(zed, toDoDescription);
-    kled.role = Role.Top;
-    kled.addGoodAgainst(rengar, toDoDescription);
-    kled.addGoodAgainst(choGath, toDoDescription);
-    kled.addGoodAgainst(quinn, toDoDescription);
-    kled.addGoodAgainst(azir, "Kled can completely destroy Azir with his ultimate or if he lands a pull with his hook. Kled's ultimate cannot be stopped, so Azir must get out of the way before it's too late.");
-    kled.addGoodWith(galio, toDoDescription);
-    kled.addGoodWith(camille, toDoDescription);
-    kled.addGoodWith(masterYi, toDoDescription);
-    kogMaw.role = Role.Bottom;
-    kogMaw.addGoodAgainst(corki, toDoDescription);
-    kogMaw.addGoodAgainst(jhin, toDoDescription);
-    kogMaw.addGoodAgainst(lucian, toDoDescription);
-    kogMaw.addGoodWith(nunu, toDoDescription);
-    kogMaw.addGoodWith(lulu, toDoDescription);
-    kogMaw.addGoodWith(nami, toDoDescription);
-    leBlanc.role = Role.Middle;
-    leBlanc.addGoodAgainst(ryze, toDoDescription);
-    leBlanc.addGoodAgainst(karma, toDoDescription);
-    leBlanc.addGoodAgainst(lux, toDoDescription);
-    leBlanc.addGoodAgainst(viktor, "LeBlanc can get in and out very quickly. Viktor won't be able to land a stun with his gravitational field and landing his laser can be difficult when facinh a flashy enemy.");
-    leBlanc.addGoodWith(akali, toDoDescription);
-    leBlanc.addGoodWith(veigar, toDoDescription);
-    leBlanc.addGoodWith(alistar, toDoDescription);
-    leeSin.role = Role.Jungle;
-    leeSin.addGoodAgainst(choGath, toDoDescription);
-    leeSin.addGoodAgainst(aatrox, toDoDescription);
-    leeSin.addGoodAgainst(rengar, toDoDescription);
-    leeSin.addGoodWith(yasuo, toDoDescription);
-    leeSin.addGoodWith(teemo, toDoDescription);
-    leeSin.addGoodWith(aatrox, toDoDescription);
-    leona.role = Role.Support;
-    leona.addGoodAgainst(lux, toDoDescription);
-    leona.addGoodAgainst(lulu, toDoDescription);
-    leona.addGoodAgainst(nami, toDoDescription);
-    leona.addGoodWith(jhin, toDoDescription);
-    leona.addGoodWith(draven, toDoDescription);
-    leona.addGoodWith(xayah, toDoDescription);
-    lissandra.role = Role.Middle;
-    lissandra.addGoodAgainst(veigar, toDoDescription);
-    lissandra.addGoodAgainst(leBlanc, toDoDescription);
-    lissandra.addGoodAgainst(cassiopeia, toDoDescription);
-    lissandra.addGoodWith(sejuani, toDoDescription);
-    lissandra.addGoodWith(trundle, toDoDescription);
-    lissandra.addGoodWith(amumu, toDoDescription);
-    lucian.role = Role.Bottom;
-    lucian.addGoodAgainst(ezreal, toDoDescription);
-    lucian.addGoodAgainst(vayne, toDoDescription);
-    lucian.addGoodAgainst(corki, toDoDescription);
-    lucian.addGoodWith(braum, toDoDescription);
-    lucian.addGoodWith(thresh, toDoDescription);
-    lucian.addGoodWith(leona, toDoDescription);
-    lulu.role = Role.Support;
-    lulu.addGoodAgainst(lux, toDoDescription);
-    lulu.addGoodAgainst(rakan, toDoDescription);
-    lulu.addGoodAgainst(annie, toDoDescription);
-    lulu.addGoodWith(vayne, toDoDescription);
-    lulu.addGoodWith(caitlyn, toDoDescription);
-    lulu.addGoodWith(ezreal, toDoDescription);
-    lux.role = Role.Middle;
-    lux.addGoodAgainst(ryze, toDoDescription);
-    lux.addGoodAgainst(galio, toDoDescription);
-    lux.addGoodAgainst(akali, toDoDescription);
-    lux.addGoodWith(ezreal, toDoDescription);
-    lux.addGoodWith(garen, toDoDescription);
-    lux.addGoodWith(jinx, toDoDescription);
-    malphite.role = Role.Top;
-    malphite.addGoodAgainst(nautilus, toDoDescription);
-    malphite.addGoodAgainst(poppy, toDoDescription);
-    malphite.addGoodAgainst(irelia, toDoDescription);
-    malphite.addGoodWith(yasuo, toDoDescription);
-    malphite.addGoodWith(orianna, toDoDescription);
-    malphite.addGoodWith(katarina, toDoDescription);
-    malzahar.role = Role.Middle;
-    malzahar.addGoodAgainst(akali, toDoDescription);
-    malzahar.addGoodAgainst(karma, toDoDescription);
-    malzahar.addGoodAgainst(vladimir, toDoDescription);
-    malzahar.addGoodWith(warwick, toDoDescription);
-    malzahar.addGoodWith(amumu, toDoDescription);
-    malzahar.addGoodWith(jarvanIV, toDoDescription);
-    maokai.role = Role.Top;
-    maokai.addGoodAgainst(shen, toDoDescription);
-    maokai.addGoodAgainst(gragas, toDoDescription);
-    maokai.addGoodAgainst(kled, toDoDescription);
-    maokai.addGoodWith(ryze, toDoDescription);
-    maokai.addGoodWith(vladimir, toDoDescription);
-    maokai.addGoodWith(swain, toDoDescription);
-    masterYi.role = Role.Jungle;
-    masterYi.addGoodAgainst(trundle, toDoDescription);
-    masterYi.addGoodAgainst(diana, toDoDescription);
-    masterYi.addGoodAgainst(wukong, toDoDescription);
-    masterYi.addGoodWith(ashe, toDoDescription);
-    masterYi.addGoodWith(aatrox, toDoDescription);
-    masterYi.addGoodWith(ahri, toDoDescription);
-    missFortune.role = Role.Bottom;
-    missFortune.addGoodAgainst(corki, toDoDescription);
-    missFortune.addGoodAgainst(ezreal, toDoDescription);
-    missFortune.addGoodAgainst(xayah, toDoDescription);
-    missFortune.addGoodWith(sona, toDoDescription);
-    missFortune.addGoodWith(leona, toDoDescription);
-    missFortune.addGoodWith(blitzcrank, toDoDescription);
-    mordekaiser.role = Role.Top;
-    mordekaiser.addGoodAgainst(shen, toDoDescription);
-    mordekaiser.addGoodAgainst(malphite, toDoDescription);
-    mordekaiser.addGoodAgainst(irelia, toDoDescription);
-    mordekaiser.addGoodWith(yorick, toDoDescription);
-    mordekaiser.addGoodWith(malphite, toDoDescription);
-    mordekaiser.addGoodWith(wukong, toDoDescription);
-    morgana.role = Role.Support;
-    morgana.addGoodAgainst(veigar, toDoDescription);
-    morgana.addGoodAgainst(lux, toDoDescription);
-    morgana.addGoodAgainst(rakan, toDoDescription);
-    morgana.addGoodWith(jinx, toDoDescription);
-    morgana.addGoodWith(caitlyn, toDoDescription);
-    morgana.addGoodWith(varus, toDoDescription);
-    nami.role = Role.Support;
-    nami.addGoodAgainst(trundle, toDoDescription);
-    nami.addGoodAgainst(lux, toDoDescription);
-    nami.addGoodAgainst(rakan, toDoDescription);
-    nami.addGoodWith(vayne, toDoDescription);
-    nami.addGoodWith(jinx, toDoDescription);
-    nami.addGoodWith(caitlyn, toDoDescription);
-    nasus.role = Role.Top;
-    nasus.addGoodAgainst(galio, toDoDescription);
-    nasus.addGoodAgainst(malphite, toDoDescription);
-    nasus.addGoodAgainst(poppy, toDoDescription);
-    nasus.addGoodWith(renekton, toDoDescription);
-    nasus.addGoodWith(zed, toDoDescription);
-    nasus.addGoodWith(khaZix, toDoDescription);
-    nautilus.role = Role.Top | Role.Support;
-    nautilus.addGoodAgainst(karma, toDoDescription);
-    nautilus.addGoodAgainst(brand, toDoDescription);
-    nautilus.addGoodAgainst(leona, toDoDescription);
-    nautilus.addGoodWith(yasuo, toDoDescription);
-    nautilus.addGoodWith(draven, toDoDescription);
-    nautilus.addGoodWith(ezreal, toDoDescription);
-    neeko.role = Role.Middle;
-    neeko.addGoodAgainst(leeSin, toDoDescription);
-    neeko.addGoodAgainst(rengar, toDoDescription);
-    neeko.addGoodAgainst(rekSai, toDoDescription);
-    neeko.addGoodWith(morgana, toDoDescription);
-    neeko.addGoodWith(katarina, toDoDescription);
-    neeko.addGoodWith(fiddlesticks, toDoDescription);
-    nidalee.role = Role.Jungle;
-    nidalee.addGoodAgainst(graves, toDoDescription);
-    nidalee.addGoodAgainst(rengar, toDoDescription);
-    nidalee.addGoodAgainst(rekSai, toDoDescription);
-    nidalee.addGoodWith(caitlyn, toDoDescription);
-    nidalee.addGoodWith(varus, toDoDescription);
-    nidalee.addGoodWith(jayce, toDoDescription);
-    nocturne.role = Role.Jungle;
-    nocturne.addGoodAgainst(rengar, toDoDescription);
-    nocturne.addGoodAgainst(pantheon, toDoDescription);
-    nocturne.addGoodAgainst(sejuani, toDoDescription);
-    nocturne.addGoodWith(twistedFate, toDoDescription);
-    nocturne.addGoodWith(shen, toDoDescription);
-    nocturne.addGoodWith(rengar, toDoDescription);
-    nunu.role = Role.Jungle;
-    nunu.addGoodAgainst(graves, toDoDescription);
-    nunu.addGoodAgainst(skarner, toDoDescription);
-    nunu.addGoodAgainst(shyvana, toDoDescription);
-    nunu.addGoodWith(vayne, toDoDescription);
-    nunu.addGoodWith(kogMaw, toDoDescription);
-    nunu.addGoodWith(caitlyn, toDoDescription);
-    olaf.role = Role.Jungle;
-    olaf.addGoodAgainst(fiddlesticks, toDoDescription);
-    olaf.addGoodAgainst(hecarim, toDoDescription);
-    olaf.addGoodAgainst(shaco, toDoDescription);
-    olaf.addGoodWith(darius, toDoDescription);
-    olaf.addGoodWith(blitzcrank, toDoDescription);
-    olaf.addGoodWith(aatrox, toDoDescription);
-    orianna.role = Role.Middle;
-    orianna.addGoodAgainst(ryze, toDoDescription);
-    orianna.addGoodAgainst(gangplank, toDoDescription);
-    orianna.addGoodAgainst(diana, toDoDescription);
-    orianna.addGoodWith(malphite, toDoDescription);
-    orianna.addGoodWith(yasuo, toDoDescription);
-    orianna.addGoodWith(jarvanIV, toDoDescription);
-    ornn.role = Role.Top | Role.Middle | Role.Support | Role.Jungle;
-    ornn.mode = Mode.Tank | Mode.Utility | Mode.ADC;
-    ornn.addGoodAgainst(galio, toDoDescription);
-    ornn.addGoodAgainst(malphite, toDoDescription);
-    ornn.addGoodAgainst(shen, toDoDescription);
-    ornn.addGoodWith(janna, toDoDescription);
-    ornn.addGoodWith(lulu, toDoDescription);
-    ornn.addGoodWith(thresh, toDoDescription);
-    pantheon.role = Role.Top | Role.Jungle;
-    pantheon.addGoodAgainst(drMundo, toDoDescription);
-    pantheon.addGoodAgainst(nasus, toDoDescription);
-    pantheon.addGoodAgainst(nautilus, toDoDescription);
-    pantheon.addGoodWith(taric, toDoDescription);
-    pantheon.addGoodWith(jax, toDoDescription);
-    pantheon.addGoodWith(sion, toDoDescription);
-    poppy.role = Role.Top;
-    poppy.addGoodAgainst(illaoi, toDoDescription);
-    poppy.addGoodAgainst(olaf, toDoDescription);
-    poppy.addGoodAgainst(kled, toDoDescription);
-    poppy.addGoodWith(sion, toDoDescription);
-    poppy.addGoodWith(vayne, toDoDescription);
-    poppy.addGoodWith(choGath, toDoDescription);
-    pyke.role = Role.Bottom;
-    pyke.addGoodAgainst(velKoz, toDoDescription);
-    pyke.addGoodAgainst(zoe, toDoDescription);
-    pyke.addGoodAgainst(annie, toDoDescription);
-    pyke.addGoodWith(missFortune, toDoDescription);
-    pyke.addGoodWith(jhin, toDoDescription);
-    pyke.addGoodWith(kaiSa, toDoDescription);
-    qiyana.role = Role.Middle | Role.Jungle;
-    qiyana.addGoodAgainst(xerath, toDoDescription);
-    qiyana.addGoodAgainst(viktor, toDoDescription);
-    qiyana.addGoodAgainst(neeko, toDoDescription);
-    quinn.role = Role.Top;
-    quinn.addGoodAgainst(tryndamere, toDoDescription);
-    quinn.addGoodAgainst(jax, toDoDescription);
-    quinn.addGoodAgainst(renekton, toDoDescription);
-    quinn.addGoodWith(leona, toDoDescription);
-    quinn.addGoodWith(thresh, toDoDescription);
-    quinn.addGoodWith(nami, toDoDescription);
-    rakan.role = Role.Support;
-    rakan.addGoodAgainst(lux, toDoDescription);
-    rakan.addGoodAgainst(karma, toDoDescription);
-    rakan.addGoodAgainst(tahmKench, toDoDescription);
-    rakan.addGoodWith(xayah, toDoDescription);
-    rakan.addGoodWith(missFortune, toDoDescription);
-    rakan.addGoodWith(jhin, toDoDescription);
-    rengar.role = Role.Jungle;
-    rengar.addGoodAgainst(shyvana, toDoDescription);
-    rengar.addGoodAgainst(vi, toDoDescription);
-    rengar.addGoodAgainst(evelynn, toDoDescription);
-    rengar.addGoodWith(khaZix, toDoDescription);
-    rengar.addGoodWith(orianna, toDoDescription);
-    rengar.addGoodWith(elise, toDoDescription);
-    riven.role = Role.Top;
-    riven.addGoodAgainst(volibear, toDoDescription);
-    riven.addGoodAgainst(tahmKench, toDoDescription);
-    riven.addGoodAgainst(galio, toDoDescription);
-    riven.addGoodWith(irelia, toDoDescription);
-    riven.addGoodWith(yasuo, toDoDescription);
-    riven.addGoodWith(ahri, toDoDescription);
-    rumble.role = Role.Top;
-    rumble.addGoodAgainst(drMundo, toDoDescription);
-    rumble.addGoodAgainst(nasus, toDoDescription);
-    rumble.addGoodAgainst(malphite, toDoDescription);
-    rumble.addGoodWith(jarvanIV, toDoDescription);
-    rumble.addGoodWith(amumu, toDoDescription);
-    rumble.addGoodWith(sona, toDoDescription);
-    ryze.role = Role.Top;
-    ryze.addGoodAgainst(ekko, toDoDescription);
-    ryze.addGoodAgainst(corki, toDoDescription);
-    ryze.addGoodAgainst(kassadin, toDoDescription);
-    ryze.addGoodWith(maokai, toDoDescription);
-    ryze.addGoodWith(jax, toDoDescription);
-    ryze.addGoodWith(ahri, toDoDescription);
-    sejuani.role = Role.Jungle;
-    sejuani.addGoodAgainst(rammus, toDoDescription);
-    sejuani.addGoodAgainst(shyvana, toDoDescription);
-    sejuani.addGoodAgainst(volibear, toDoDescription);
-    sejuani.addGoodWith(lissandra, toDoDescription);
-    sejuani.addGoodWith(talon, toDoDescription);
-    sejuani.addGoodWith(katarina, toDoDescription);
-    senna.role = Role.Bottom | Role.Support;
-    senna.addGoodAgainst(janna, toDoDescription);
-    senna.addGoodAgainst(bard, toDoDescription);
-    senna.addGoodWith(lucian, toDoDescription);
-    senna.addGoodWith(jhin, toDoDescription);
-    senna.addGoodWith(vayne, toDoDescription);
-    sett.role = Role.Top;
-    sett.addGoodAgainst(yasuo, toDoDescription);
-    sett.addGoodAgainst(camille, toDoDescription);
-    shaco.role = Role.Jungle;
-    shaco.addGoodAgainst(udyr, toDoDescription);
-    shaco.addGoodAgainst(graves, toDoDescription);
-    shaco.addGoodAgainst(jax, toDoDescription);
-    shaco.addGoodWith(galio, toDoDescription);
-    shaco.addGoodWith(bard, toDoDescription);
-    shaco.addGoodWith(talon, toDoDescription);
-    shen.role = Role.Top;
-    shen.addGoodAgainst(tahmKench, toDoDescription);
-    shen.addGoodAgainst(rengar, toDoDescription);
-    shen.addGoodAgainst(gragas, toDoDescription);
-    shen.addGoodWith(twistedFate, toDoDescription);
-    shen.addGoodWith(zed, toDoDescription);
-    shen.addGoodWith(akali, toDoDescription);
-    shyvana.role = Role.Jungle;
-    shyvana.addGoodAgainst(nocturne, toDoDescription);
-    shyvana.addGoodAgainst(leeSin, toDoDescription);
-    shyvana.addGoodAgainst(hecarim, toDoDescription);
-    shyvana.addGoodWith(yasuo, toDoDescription);
-    shyvana.addGoodWith(shen, toDoDescription);
-    shyvana.addGoodWith(nautilus, toDoDescription);
-    singed.role = Role.Top;
-    singed.addGoodAgainst(shen, toDoDescription);
-    singed.addGoodAgainst(jax, toDoDescription);
-    singed.addGoodAgainst(illaoi, toDoDescription);
-    singed.addGoodWith(cassiopeia, toDoDescription);
-    singed.addGoodWith(volibear, toDoDescription);
-    singed.addGoodWith(teemo, toDoDescription);
-    sion.role = Role.Top;
-    sion.addGoodAgainst(illaoi, toDoDescription);
-    sion.addGoodAgainst(nasus, toDoDescription);
-    sion.addGoodAgainst(shen, toDoDescription);
-    sion.addGoodWith(pantheon, toDoDescription);
-    sion.addGoodWith(poppy, toDoDescription);
-    sion.addGoodWith(talon, toDoDescription);
-    sivir.role = Role.Bottom;
-    sivir.addGoodAgainst(ezreal, toDoDescription);
-    sivir.addGoodAgainst(xayah, toDoDescription);
-    sivir.addGoodAgainst(lucian, toDoDescription);
-    sivir.addGoodWith(leona, toDoDescription);
-    sivir.addGoodWith(soraka, toDoDescription);
-    sivir.addGoodWith(taric, toDoDescription);
-    skarner.role = Role.Jungle;
-    skarner.addGoodAgainst(nocturne, toDoDescription);
-    skarner.addGoodAgainst(olaf, toDoDescription);
-    skarner.addGoodAgainst(shaco, toDoDescription);
-    skarner.addGoodWith(jayce, toDoDescription);
-    skarner.addGoodWith(heimerdinger, toDoDescription);
-    skarner.addGoodWith(thresh, toDoDescription);
-    sona.role = Role.Support;
-    sona.addGoodAgainst(karma, toDoDescription);
-    sona.addGoodAgainst(velKoz, toDoDescription);
-    sona.addGoodAgainst(lulu, toDoDescription);
-    sona.addGoodWith(ezreal, toDoDescription);
-    sona.addGoodWith(missFortune, toDoDescription);
-    sona.addGoodWith(caitlyn, toDoDescription);
-    soraka.role = Role.Support;
-    soraka.addGoodAgainst(veigar, toDoDescription);
-    soraka.addGoodAgainst(morgana, toDoDescription);
-    soraka.addGoodAgainst(velKoz, toDoDescription);
-    soraka.addGoodWith(ezreal, toDoDescription);
-    soraka.addGoodWith(sivir, toDoDescription);
-    soraka.addGoodWith(urgot, toDoDescription);
-    swain.role = Role.Top;
-    swain.addGoodAgainst(illaoi, toDoDescription);
-    swain.addGoodAgainst(shen, toDoDescription);
-    swain.addGoodAgainst(garen, toDoDescription);
-    swain.addGoodWith(vladimir, toDoDescription);
-    swain.addGoodWith(maokai, toDoDescription);
-    swain.addGoodWith(alistar, toDoDescription);
-    sylas.role = Role.Middle;
-    sylas.addGoodAgainst(zoe, toDoDescription);
-    sylas.addGoodAgainst(xerath, toDoDescription);
-    sylas.addGoodAgainst(swain, toDoDescription);
-    syndra.role = Role.Middle;
-    syndra.addGoodAgainst(ryze, toDoDescription);
-    syndra.addGoodAgainst(diana, toDoDescription);
-    syndra.addGoodAgainst(kennen, toDoDescription);
-    syndra.addGoodWith(zac, toDoDescription);
-    syndra.addGoodWith(zilean, toDoDescription);
-    syndra.addGoodWith(nami, toDoDescription);
-    tahmKench.role = Role.Top | Role.Support;
-    tahmKench.addGoodAgainst(karma, toDoDescription);
-    tahmKench.addGoodAgainst(taric, toDoDescription);
-    tahmKench.addGoodAgainst(brand, toDoDescription);
-    tahmKench.addGoodWith(jinx, toDoDescription);
-    tahmKench.addGoodWith(jhin, toDoDescription);
-    taliyah.role = Role.Middle;
-    taliyah.addGoodAgainst(ryze, toDoDescription);
-    taliyah.addGoodAgainst(veigar, toDoDescription);
-    taliyah.addGoodAgainst(syndra, toDoDescription);
-    taliyah.addGoodWith(talon, toDoDescription);
-    taliyah.addGoodWith(twistedFate, toDoDescription);
-    taliyah.addGoodWith(kindred, toDoDescription);
-    talon.role = Role.Middle;
-    talon.addGoodAgainst(karma, toDoDescription);
-    talon.addGoodAgainst(lissandra, toDoDescription);
-    talon.addGoodAgainst(ekko, toDoDescription);
-    talon.addGoodWith(zed, toDoDescription);
-    talon.addGoodWith(fizz, toDoDescription);
-    talon.addGoodWith(sejuani, toDoDescription);
-    taric.role = Role.Support;
-    taric.addGoodAgainst(leona, toDoDescription);
-    taric.addGoodAgainst(karma, toDoDescription);
-    taric.addGoodAgainst(lulu, toDoDescription);
-    taric.addGoodWith(graves, toDoDescription);
-    taric.addGoodWith(ezreal, toDoDescription);
-    taric.addGoodWith(vayne, toDoDescription);
-    teemo.role = Role.Top;
-    teemo.addGoodAgainst(choGath, toDoDescription);
-    teemo.addGoodAgainst(garen, toDoDescription);
-    teemo.addGoodAgainst(poppy, toDoDescription);
-    teemo.addGoodWith(cassiopeia, toDoDescription);
-    teemo.addGoodWith(leeSin, toDoDescription);
-    teemo.addGoodWith(blitzcrank, toDoDescription);
-    thresh.role = Role.Support;
-    thresh.addGoodAgainst(lux, toDoDescription);
-    thresh.addGoodAgainst(karma, toDoDescription);
-    thresh.addGoodAgainst(veigar, toDoDescription);
-    thresh.addGoodWith(vayne, toDoDescription);
-    thresh.addGoodWith(draven, toDoDescription);
-    thresh.addGoodWith(lucian, toDoDescription);
-    tristana.role = Role.Bottom;
-    tristana.addGoodAgainst(corki, toDoDescription);
-    tristana.addGoodAgainst(kalista, toDoDescription);
-    tristana.addGoodAgainst(lucian, toDoDescription);
-    tristana.addGoodWith(leona, toDoDescription);
-    tristana.addGoodWith(thresh, toDoDescription);
-    tristana.addGoodWith(alistar, toDoDescription);
-    trundle.role = Role.Jungle;
-    trundle.addGoodAgainst(garen, toDoDescription);
-    trundle.addGoodAgainst(sion, toDoDescription);
-    trundle.addGoodAgainst(nasus, toDoDescription);
-    trundle.addGoodWith(lissandra, toDoDescription);
-    trundle.addGoodWith(vayne, toDoDescription);
-    trundle.addGoodWith(jarvanIV, toDoDescription);
-    tryndamere.role = Role.Top;
-    tryndamere.addGoodAgainst(nautilus, toDoDescription);
-    tryndamere.addGoodAgainst(choGath, toDoDescription);
-    tryndamere.addGoodAgainst(garen, toDoDescription);
-    tryndamere.addGoodWith(aatrox, toDoDescription);
-    tryndamere.addGoodWith(ashe, toDoDescription);
-    tryndamere.addGoodWith(zilean, toDoDescription);
-    tryndamere.role = Role.Middle;
-    twistedFate.addGoodAgainst(azir, toDoDescription);
-    twistedFate.addGoodAgainst(akali, toDoDescription);
-    twistedFate.addGoodAgainst(ryze, toDoDescription);
-    twistedFate.addGoodWith(nocturne, toDoDescription);
-    twistedFate.addGoodWith(shen, toDoDescription);
-    twistedFate.addGoodWith(aatrox, toDoDescription);
-    twitch.role = Role.Bottom;
-    twitch.addGoodAgainst(corki, toDoDescription);
-    twitch.addGoodAgainst(sivir, toDoDescription);
-    twitch.addGoodAgainst(kalista, toDoDescription);
-    twitch.addGoodWith(taric, toDoDescription);
-    twitch.addGoodWith(leona, toDoDescription);
-    twitch.addGoodWith(braum, toDoDescription);
-    udyr.role = Role.Jungle;
-    udyr.addGoodAgainst(graves, toDoDescription);
-    udyr.addGoodAgainst(leeSin, toDoDescription);
-    udyr.addGoodAgainst(nidalee, toDoDescription);
-    udyr.addGoodWith(ahri, toDoDescription);
-    udyr.addGoodWith(ryze, toDoDescription);
-    udyr.addGoodWith(leBlanc, toDoDescription);
-    urgot.role = Role.Top;
-    urgot.addGoodAgainst(jarvanIV, toDoDescription);
-    urgot.addGoodAgainst(fiora, toDoDescription);
-    urgot.addGoodAgainst(sivir, toDoDescription);
-    urgot.addGoodWith(soraka, toDoDescription);
-    urgot.addGoodWith(taric, toDoDescription);
-    urgot.addGoodWith(janna, toDoDescription);
-    varus.role = Role.Bottom;
-    varus.addGoodAgainst(corki, toDoDescription);
-    varus.addGoodAgainst(sivir, toDoDescription);
-    varus.addGoodAgainst(ashe, toDoDescription);
-    varus.addGoodWith(leona, toDoDescription);
-    varus.addGoodWith(thresh, toDoDescription);
-    varus.addGoodWith(nami, toDoDescription);
-    vayne.role = Role.Bottom;
-    vayne.addGoodAgainst(ziggs, toDoDescription);
-    vayne.addGoodAgainst(sivir, toDoDescription);
-    vayne.addGoodAgainst(jhin, toDoDescription);
-    vayne.addGoodWith(thresh, toDoDescription);
-    vayne.addGoodWith(nunu, toDoDescription);
-    vayne.addGoodWith(nami, toDoDescription);
-    veigar.role = Role.Middle;
-    veigar.addGoodAgainst(diana, toDoDescription);
-    veigar.addGoodAgainst(talon, toDoDescription);
-    veigar.addGoodAgainst(akali, toDoDescription);
-    veigar.addGoodWith(leBlanc, toDoDescription);
-    veigar.addGoodWith(warwick, toDoDescription);
-    veigar.addGoodWith(amumu, toDoDescription);
-    velKoz.role = Role.Middle | Role.Support;
-    velKoz.addGoodAgainst(swain, toDoDescription);
-    velKoz.addGoodAgainst(galio, toDoDescription);
-    velKoz.addGoodAgainst(viktor, toDoDescription);
-    velKoz.addGoodWith(amumu, toDoDescription);
-    velKoz.addGoodWith(aatrox, toDoDescription);
-    velKoz.addGoodWith(leona, toDoDescription);
-    vi.role = Role.Jungle;
-    vi.addGoodAgainst(nidalee, toDoDescription);
-    vi.addGoodAgainst(shaco, toDoDescription);
-    vi.addGoodAgainst(elise, toDoDescription);
-    vi.addGoodAgainst(azir, "Vi can cast her ultimate on Azir and there is no way she can be stopped. Vi has a dash that can close the gap between her and Azir, making Azir's attack futile which he gets punched in the face.");
-    vi.addGoodWith(yasuo, toDoDescription);
-    vi.addGoodWith(caitlyn, toDoDescription);
-    vi.addGoodWith(orianna, toDoDescription);
-    viktor.role = Role.Middle;
-    viktor.mode = Mode.APC;
-    viktor.addGoodAgainst(ryze, "Viktor's ultimate can cancel Ryze's ultimate (I think?). Viktor's range is further than Ryze's.");
-    viktor.addGoodAgainst(katarina, "Viktor can cancel Katarina's ultimate with his ultimate. Katarina must be moving or she will be stunned in Viktor's gravitational field. A good Katarina can avoid this, but in low-elo, most don't predict the ultimate cancel.");
-    viktor.addGoodWith(jarvanIV, "Jarvan IV can trap enemies within his ultimate which allows for Viktor's ultimate to maximize damage. Hard CC can be chained with Jarvan IV's CC dash and Viktor's gravitational field.");
-    viktor.addGoodWith(sona, "Sona makes is easy to cast a good ultimate, the move speed she gives you can be used for poking, like a hit and run.");
-    viktor.addGoodWith(malzahar, "Malzahar keeps enemies in one place with his ultimate, perfect for Viktor's ultimate! Landing a gravitional stun will allow Malzahar's summons to deal damage instead of chasing.");
-    vladimir.role = Role.Top | Role.Middle;
-    vladimir.addGoodAgainst(ryze, toDoDescription);
-    vladimir.addGoodAgainst(gangplank, toDoDescription);
-    vladimir.addGoodAgainst(yasuo, toDoDescription);
-    vladimir.addGoodWith(swain, toDoDescription);
-    vladimir.addGoodWith(kennen, toDoDescription);
-    vladimir.addGoodWith(zed, toDoDescription);
-    volibear.role = Role.Jungle;
-    volibear.addGoodAgainst(hecarim, toDoDescription);
-    volibear.addGoodAgainst(leeSin, toDoDescription);
-    volibear.addGoodAgainst(amumu, toDoDescription);
-    volibear.addGoodWith(yasuo, toDoDescription);
-    volibear.addGoodWith(teemo, toDoDescription);
-    volibear.addGoodWith(ashe, toDoDescription);
-    warwick.role = Role.Jungle;
-    warwick.addGoodAgainst(poppy, toDoDescription);
-    warwick.addGoodAgainst(leeSin, toDoDescription);
-    warwick.addGoodAgainst(skarner, toDoDescription);
-    warwick.addGoodWith(galio, toDoDescription);
-    warwick.addGoodWith(kled, toDoDescription);
-    warwick.addGoodWith(bard, toDoDescription);
-    wukong.role = Role.Jungle;
-    wukong.addGoodAgainst(gragas, toDoDescription);
-    wukong.addGoodAgainst(trundle, toDoDescription);
-    wukong.addGoodAgainst(jayce, toDoDescription);
-    wukong.addGoodAgainst(aurelionSol, "Wukong can up into Aurelion Sol's face and keep there with his ultimate. Wukong can close the gap easily with his dash, and he can get close by using his invisibility when he makes a clone.");
-    wukong.addGoodWith(galio, toDoDescription);
-    wukong.addGoodWith(bard, toDoDescription);
-    wukong.addGoodWith(sion, toDoDescription);
-    xayah.role = Role.Bottom;
-    xayah.addGoodAgainst(corki, toDoDescription);
-    xayah.addGoodAgainst(lucian, toDoDescription);
-    xayah.addGoodAgainst(kalista, toDoDescription);
-    xayah.addGoodWith(rakan, toDoDescription);
-    xayah.addGoodWith(sona, toDoDescription);
-    xayah.addGoodWith(galio, toDoDescription);
-    xerath.role = Role.Middle;
-    xerath.addGoodAgainst(azir, toDoDescription);
-    xerath.addGoodAgainst(lissandra, toDoDescription);
-    xerath.addGoodAgainst(viktor, toDoDescription);
-    xerath.addGoodWith(jarvanIV, toDoDescription);
-    xerath.addGoodWith(quinn, toDoDescription);
-    xerath.addGoodWith(varus, toDoDescription);
-    xinZhao.role = Role.Jungle;
-    xinZhao.addGoodAgainst(rengar, toDoDescription);
-    xinZhao.addGoodAgainst(olaf, toDoDescription);
-    xinZhao.addGoodAgainst(nocturne, toDoDescription);
-    xinZhao.addGoodWith(yasuo, toDoDescription);
-    xinZhao.addGoodWith(pantheon, toDoDescription);
-    xinZhao.addGoodWith(blitzcrank, toDoDescription);
-    yasuo.role = Role.Middle;
-    yasuo.addGoodAgainst(drMundo, toDoDescription);
-    yasuo.addGoodAgainst(yorick, toDoDescription);
-    yasuo.addGoodAgainst(galio, toDoDescription);
-    yasuo.addGoodWith(malphite, toDoDescription);
-    yasuo.addGoodWith(wukong, toDoDescription);
-    yasuo.addGoodWith(alistar, toDoDescription);
-    yorick.role = Role.Top;
-    yorick.addGoodAgainst(nasus, toDoDescription);
-    yorick.addGoodAgainst(kennen, toDoDescription);
-    yorick.addGoodAgainst(vladimir, toDoDescription);
-    yorick.addGoodWith(mordekaiser, toDoDescription);
-    yorick.addGoodWith(vayne, toDoDescription);
-    yorick.addGoodWith(cassiopeia, toDoDescription);
-    yuumi.role = Role.Support;
-    yuumi.addGoodAgainst(lux, toDoDescription);
-    yuumi.addGoodAgainst(annie, toDoDescription);
-    yuumi.addGoodAgainst(ezreal, toDoDescription);
-    yuumi.addGoodWith(vayne, toDoDescription);
-    yuumi.addGoodWith(caitlyn, toDoDescription);
-    yuumi.addGoodWith(jinx, toDoDescription);
-    zac.role = Role.Support | Role.Jungle;
-    zac.addGoodAgainst(wukong, toDoDescription);
-    zac.addGoodAgainst(trundle, toDoDescription);
-    zac.addGoodAgainst(skarner, toDoDescription);
-    zac.addGoodWith(yasuo, toDoDescription);
-    zac.addGoodWith(orianna, toDoDescription);
-    zac.addGoodWith(syndra, toDoDescription);
-    zed.role = Role.Middle;
-    zed.addGoodAgainst(ryze, toDoDescription);
-    zed.addGoodAgainst(azir, toDoDescription);
-    zed.addGoodAgainst(taliyah, toDoDescription);
-    zed.addGoodWith(talon, toDoDescription);
-    zed.addGoodWith(vi, toDoDescription);
-    zed.addGoodWith(nasus, toDoDescription);
-    ziggs.role = Role.Middle;
-    ziggs.addGoodAgainst(aurelionSol, toDoDescription);
-    ziggs.addGoodAgainst(gangplank, toDoDescription);
-    ziggs.addGoodAgainst(cassiopeia, toDoDescription);
-    ziggs.addGoodWith(amumu, toDoDescription);
-    ziggs.addGoodWith(jarvanIV, toDoDescription);
-    ziggs.addGoodWith(kennen, toDoDescription);
-    zilean.role = Role.Middle;
-    zilean.addGoodAgainst(braum, toDoDescription);
-    zilean.addGoodAgainst(alistar, toDoDescription);
-    zilean.addGoodAgainst(zyra, toDoDescription);
-    zilean.addGoodWith(aatrox, toDoDescription);
-    zilean.addGoodWith(syndra, toDoDescription);
-    zilean.addGoodWith(hecarim, toDoDescription);
-    zoe.role = Role.Middle;
-    zoe.addGoodAgainst(azir, toDoDescription);
-    zoe.addGoodAgainst(orianna, toDoDescription);
-    zoe.addGoodAgainst(ryze, toDoDescription);
-    zoe.addGoodWith(thresh, toDoDescription);
-    zoe.addGoodWith(bard, toDoDescription);
-    zoe.addGoodWith(zilean, toDoDescription);
-    zyra.role = Role.Middle | Role.Support;
-    zyra.addGoodAgainst(lux, toDoDescription);
-    zyra.addGoodAgainst(bard, toDoDescription);
-    zyra.addGoodAgainst(annie, toDoDescription);
-    zyra.addGoodWith(ashe, toDoDescription);
-    zyra.addGoodWith(yasuo, toDoDescription);
-    zyra.addGoodWith(amumu, toDoDescription);
+    ChampionData.clear();
+    ChampionData.load(JSON.parse(`[{"name":"Aatrox","goodWith":[{"name":"Gnar","title":"Good with Gnar","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good with Azir","details":"TO DO: details!","score":1},{"name":"Cho'Gath","title":"Good with Cho'Gath","details":"TO DO: details!","score":1},{"name":"Garen","title":"Good with Garen","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good with Lee Sin","details":"TO DO: details!","score":1},{"name":"Master Yi","title":"Good with Master Yi","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good with Olaf","details":"TO DO: details!","score":1},{"name":"Tryndamere","title":"Good with Tryndamere","details":"TO DO: details!","score":1},{"name":"Twisted Fate","title":"Good with Twisted Fate","details":"TO DO: details!","score":1},{"name":"Vel'Koz","title":"Good with Vel'Koz","details":"TO DO: details!","score":1},{"name":"Zilean","title":"Good with Zilean","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Gangplank","title":"Good against Gangplank","details":"TO DO: details!","score":1},{"name":"Darius","title":"Good against Darius","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good against Viktor","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good against Malphite","details":"TO DO: details!","score":1},{"name":"Malzahar","title":"Good against Malzahar","details":"TO DO: details!","score":1}]},{"name":"Ahri","goodWith":[{"name":"Jax","title":"Good with Jax","details":"TO DO: details!","score":1},{"name":"Riven","title":"Good with Riven","details":"TO DO: details!","score":1},{"name":"Irelia","title":"Good with Irelia","details":"TO DO: details!","score":1},{"name":"Fiora","title":"Good with Fiora","details":"TO DO: details!","score":1},{"name":"Kassadin","title":"Good with Kassadin","details":"TO DO: details!","score":1},{"name":"Master Yi","title":"Good with Master Yi","details":"TO DO: details!","score":1},{"name":"Ryze","title":"Good with Ryze","details":"TO DO: details!","score":1},{"name":"Udyr","title":"Good with Udyr","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good against Viktor","details":"TO DO: details!","score":1}]},{"name":"Akali","goodWith":[{"name":"Diana","title":"Good with Diana","details":"TO DO: details!","score":1},{"name":"LeBlanc","title":"Good with LeBlanc","details":"TO DO: details!","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good with Shen","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nasus","title":"Good against Nasus","details":"TO DO: details!","score":1},{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1},{"name":"Aurelion Sol","title":"Good against Aurelion Sol","details":"Akali will get up in the face of Aurelion Sol and make it difficult for him to get off. She can hide in her shroud and to avoid being blasted away, as long as she makes sure to avoid his stars from revealing her position. Her ultimate can close the gap and so can her shuriken.","score":1}]},{"name":"Alistar","goodWith":[{"name":"Azir","title":"Good with Azir","details":"Alistar will make Azir's life easier with his stuns and knockups. Alistar can push away enemies if they get too close or direct them into the soliders with a headbutt. He can also smash to send enemies flying which can be followed up with Azir's ultimate.","score":1},{"name":"Kalista","title":"Good with Kalista","details":"TO DO: details!","score":1},{"name":"LeBlanc","title":"Good with LeBlanc","details":"TO DO: details!","score":1},{"name":"Swain","title":"Good with Swain","details":"TO DO: details!","score":1},{"name":"Tristana","title":"Good with Tristana","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1}],"goodAgainst":[]},{"name":"Amumu","goodWith":[{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1},{"name":"Fiddlesticks","title":"Good with Fiddlesticks","details":"TO DO: details!","score":1},{"name":"Morgana","title":"Good with Morgana","details":"TO DO: details!","score":1},{"name":"Annie","title":"Good with Annie","details":"TO DO: details!","score":1},{"name":"Brand","title":"Good with Brand","details":"TO DO: details!","score":1},{"name":"Fizz","title":"Good with Fizz","details":"TO DO: details!","score":1},{"name":"Gangplank","title":"Good with Gangplank","details":"TO DO: details!","score":1},{"name":"Karthus","title":"Good with Karthus","details":"TO DO: details!","score":1},{"name":"Kennen","title":"Good with Kennen","details":"TO DO: details!","score":1},{"name":"Lissandra","title":"Good with Lissandra","details":"TO DO: details!","score":1},{"name":"Malzahar","title":"Good with Malzahar","details":"TO DO: details!","score":1},{"name":"Rumble","title":"Good with Rumble","details":"TO DO: details!","score":1},{"name":"Veigar","title":"Good with Veigar","details":"TO DO: details!","score":1},{"name":"Vel'Koz","title":"Good with Vel'Koz","details":"TO DO: details!","score":1},{"name":"Ziggs","title":"Good with Ziggs","details":"TO DO: details!","score":1},{"name":"Zyra","title":"Good with Zyra","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Shyvana","title":"Good against Shyvana","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good against Lee Sin","details":"TO DO: details!","score":1}]},{"name":"Anivia","goodWith":[{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Dr. Mundo","title":"Good with Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Kayle","title":"Good against Kayle","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Akali","title":"Good against Akali","details":"TO DO: details!","score":1}]},{"name":"Annie","goodWith":[{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good with Lucian","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1},{"name":"Jayce","title":"Good against Jayce","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good against Viktor","details":"TO DO: details!","score":1}]},{"name":"Aphelios","goodWith":[],"goodAgainst":[]},{"name":"Ashe","goodWith":[{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Janna","title":"Good with Janna","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Gragas","title":"Good with Gragas","details":"TO DO: details!","score":1},{"name":"Master Yi","title":"Good with Master Yi","details":"TO DO: details!","score":1},{"name":"Tryndamere","title":"Good with Tryndamere","details":"TO DO: details!","score":1},{"name":"Volibear","title":"Good with Volibear","details":"TO DO: details!","score":1},{"name":"Zyra","title":"Good with Zyra","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good against Sivir","details":"TO DO: details!","score":1}]},{"name":"Aurelion Sol","goodWith":[{"name":"Morgana","title":"Good with Morgana","details":"Morgana keeps the enemies at bay with her skillshot and ultimate. Spell shield may not be so useful on Aurelion Sol as it is not wise for him to get close to the enemies but can let him heard engage to clean up or chase down.","score":1}],"goodAgainst":[{"name":"Zoe","title":"Good against Zoe","details":"Zoe wants to keep her distance? So does Aurelion Sol does too!","score":1},{"name":"Taliyah","title":"Good against Taliyah","details":"Taliyah can get Aurelion Sol in a bad position with her earth bump, but Aurelion Sol benefits from his stars as he can kit while dealing damage.","score":1},{"name":"Heimerdinger","title":"Good against Heimerdinger","details":"Heimerdinger's turrets cannot reach Aurelion Sol when his stars are outter-orbiting, Aurelion Sol does not need to get into the range of Heimerdinger's turrets to farm. Aurelion Sol can kit around easily while dealing damage with his stars, dodging any energized rays the turrets might throw at you, and his rockets, and his stun. Can easily escape from his ultimate sentry as well. ","score":1}]},{"name":"Azir","goodWith":[{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Teemo","title":"Good with Teemo","details":"Azir rather use his soliders to attack, Teemo's blind is ineffective. Teemo's shrooms can be annoying, Azir should equip himself with a red flare.","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"Azir can sending multiple enemies flying with his ultimate, perfect for Yasuo to follow up.","score":1},{"name":"Alistar","title":"Good with Alistar","details":"Alistar will make Azir's life easier with his stuns and knockups. Alistar can push away enemies if they get too close or direct them into the soliders with a headbutt. He can also smash to send enemies flying which can be followed up with Azir's ultimate.","score":1}],"goodAgainst":[{"name":"Yasuo","title":"Good against Yasuo","details":"Azir can ultimate away Yasuo if he gets too close. Be careful for his windshield when thrusting your soliders as it can halt their movement. Other than that, there should be no worry.","score":1},{"name":"Gangplank","title":"Good against Gangplank","details":"Azir's basic attack has no travel time, it is faster than Gangplank's gun, use this to destroy barrels before he can make them explode. Azir also like to keep his distance, so barrels should not be much of a problem as long as Azir can kit well.","score":1},{"name":"Heimerdinger","title":"Good against Heimerdinger","details":"Azir can send his soliders to clear Heimerdinger's turrets.","score":1}]},{"name":"Bard","goodWith":[{"name":"Sion","title":"Good with Sion","details":"TO DO: details!","score":1},{"name":"Heimerdinger","title":"Good with Heimerdinger","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good with Jhin","details":"TO DO: details!","score":1},{"name":"Camille","title":"Good with Camille","details":"TO DO: details!","score":1},{"name":"Ekko","title":"Good with Ekko","details":"TO DO: details!","score":1},{"name":"Shaco","title":"Good with Shaco","details":"TO DO: details!","score":1},{"name":"Warwick","title":"Good with Warwick","details":"TO DO: details!","score":1},{"name":"Wukong","title":"Good with Wukong","details":"TO DO: details!","score":1},{"name":"Zoe","title":"Good with Zoe","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Veigar","title":"Good against Veigar","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1},{"name":"Braum","title":"Good against Braum","details":"TO DO: details!","score":1}]},{"name":"Blitzcrank","goodWith":[{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Corki","title":"Good with Corki","details":"TO DO: details!","score":1},{"name":"Elise","title":"Good with Elise","details":"TO DO: details!","score":1},{"name":"Heimerdinger","title":"Good with Heimerdinger","details":"TO DO: details!","score":1},{"name":"Miss Fortune","title":"Good with Miss Fortune","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good with Olaf","details":"TO DO: details!","score":1},{"name":"Teemo","title":"Good with Teemo","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good with Xin Zhao","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Zyra","title":"Good against Zyra","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good against Nami","details":"TO DO: details!","score":1}]},{"name":"Brand","goodWith":[{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Sona","title":"Good with Sona","details":"TO DO: details!","score":1},{"name":"Maokai","title":"Good with Maokai","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Vel'Koz","title":"Good against Vel'Koz","details":"TO DO: details!","score":1},{"name":"Rakan","title":"Good against Rakan","details":"TO DO: details!","score":1},{"name":"Braum","title":"Good against Braum","details":"TO DO: details!","score":1}]},{"name":"Braum","goodWith":[{"name":"Lucian","title":"Good with Lucian","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Twitch","title":"Good with Twitch","details":"TO DO: details!","score":1},{"name":"Gnar","title":"Good with Gnar","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Fiddlesticks","title":"Good against Fiddlesticks","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1}]},{"name":"Caitlyn","goodWith":[{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1},{"name":"Morgana","title":"Good with Morgana","details":"TO DO: details!","score":1},{"name":"Nidalee","title":"Good with Nidalee","details":"TO DO: details!","score":1},{"name":"Nunu","title":"Good with Nunu","details":"TO DO: details!","score":1},{"name":"Sona","title":"Good with Sona","details":"TO DO: details!","score":1},{"name":"Vi","title":"Good with Vi","details":"TO DO: details!","score":1},{"name":"Yuumi","title":"Good with Yuumi","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ezreal","title":"Good against Ezreal","details":"TO DO: details!","score":1},{"name":"Ziggs","title":"Good against Ziggs","details":"TO DO: details!","score":1},{"name":"Xayah","title":"Good against Xayah","details":"TO DO: details!","score":1}]},{"name":"Camille","goodWith":[{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Illaoi","title":"Good with Illaoi","details":"TO DO: details!","score":1},{"name":"Kled","title":"Good with Kled","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Cassiopeia","title":"Good against Cassiopeia","details":"TO DO: details!","score":1},{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1},{"name":"Dr. Mundo","title":"Good against Dr. Mundo","details":"TO DO: details!","score":1}]},{"name":"Cassiopeia","goodWith":[{"name":"Teemo","title":"Good with Teemo","details":"TO DO: details!","score":1},{"name":"Singed","title":"Good with Singed","details":"TO DO: details!","score":1},{"name":"Yorick","title":"Good with Yorick","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good against Zed","details":"TO DO: details!","score":1}]},{"name":"Cho'Gath","goodWith":[{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Evelynn","title":"Good with Evelynn","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good with Poppy","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Pantheon","title":"Good against Pantheon","details":"TO DO: details!","score":1},{"name":"Gragas","title":"Good against Gragas","details":"TO DO: details!","score":1}]},{"name":"Corki","goodWith":[{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1},{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Ziggs","title":"Good against Ziggs","details":"TO DO: details!","score":1}]},{"name":"Darius","goodWith":[{"name":"Draven","title":"Good with Draven","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good with Olaf","details":"TO DO: details!","score":1},{"name":"Fiora","title":"Good with Fiora","details":"TO DO: details!","score":1},{"name":"Garen","title":"Good with Garen","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1}]},{"name":"Diana","goodWith":[{"name":"Akali","title":"Good with Akali","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Kassadin","title":"Good with Kassadin","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Zed","title":"Good against Zed","details":"TO DO: details!","score":1},{"name":"LeBlanc","title":"Good against LeBlanc","details":"TO DO: details!","score":1},{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Aurelion Sol","title":"Good against Aurelion Sol","details":"","score":1}]},{"name":"Dr. Mundo","goodWith":[{"name":"Anivia","title":"Good with Anivia","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good with Olaf","details":"TO DO: details!","score":1},{"name":"Jax","title":"Good with Jax","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Darius","title":"Good against Darius","details":"TO DO: details!","score":1},{"name":"Teemo","title":"Good against Teemo","details":"TO DO: details!","score":1},{"name":"Irelia","title":"Good against Irelia","details":"TO DO: details!","score":1}]},{"name":"Draven","goodWith":[{"name":"Darius","title":"Good with Darius","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Janna","title":"Good with Janna","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good with Nautilus","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good against Sivir","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1}]},{"name":"Ekko","goodWith":[{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good against Zed","details":"TO DO: details!","score":1}]},{"name":"Elise","goodWith":[{"name":"Rengar","title":"Good with Rengar","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good with Karma","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1},{"name":"Rek'Sai","title":"Good against Rek'Sai","details":"TO DO: details!","score":1},{"name":"Udyr","title":"Good against Udyr","details":"TO DO: details!","score":1}]},{"name":"Evelynn","goodWith":[{"name":"Cho'Gath","title":"Good with Cho'Gath","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good with Shen","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Skarner","title":"Good against Skarner","details":"TO DO: details!","score":1},{"name":"Nidalee","title":"Good against Nidalee","details":"TO DO: details!","score":1}]},{"name":"Ezreal","goodWith":[{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Braum","title":"Good with Braum","details":"TO DO: details!","score":1},{"name":"Sona","title":"Good with Sona","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good with Taric","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good with Karma","details":"TO DO: details!","score":1},{"name":"Kayle","title":"Good with Kayle","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1},{"name":"Lux","title":"Good with Lux","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good with Nautilus","details":"TO DO: details!","score":1},{"name":"Soraka","title":"Good with Soraka","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Varus","title":"Good against Varus","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1},{"name":"Kalista","title":"Good against Kalista","details":"TO DO: details!","score":1}]},{"name":"Fiddlesticks","goodWith":[{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Kennen","title":"Good with Kennen","details":"TO DO: details!","score":1},{"name":"Neeko","title":"Good with Neeko","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good against Amumu","details":"TO DO: details!","score":1},{"name":"Rek'Sai","title":"Good against Rek'Sai","details":"TO DO: details!","score":1}]},{"name":"Fiora","goodWith":[{"name":"Darius","title":"Good with Darius","details":"TO DO: details!","score":1},{"name":"Volibear","title":"Good with Volibear","details":"TO DO: details!","score":1},{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1}]},{"name":"Fizz","goodWith":[{"name":"Talon","title":"Good with Talon","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Aurelion Sol","title":"Good against Aurelion Sol","details":"TO DO: details!","score":1},{"name":"Syndra","title":"Good against Syndra","details":"TO DO: details!","score":1}]},{"name":"Galio","goodWith":[{"name":"Camille","title":"Good with Camille","details":"TO DO: details!","score":1},{"name":"Ekko","title":"Good with Ekko","details":"TO DO: details!","score":1},{"name":"Fiddlesticks","title":"Good with Fiddlesticks","details":"TO DO: details!","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1},{"name":"Wukong","title":"Good with Wukong","details":"TO DO: details!","score":1},{"name":"Nunu","title":"Good with Nunu","details":"TO DO: details!","score":1},{"name":"Illaoi","title":"Good with Illaoi","details":"TO DO: details!","score":1},{"name":"Kindred","title":"Good with Kindred","details":"TO DO: details!","score":1},{"name":"Kled","title":"Good with Kled","details":"TO DO: details!","score":1},{"name":"Shaco","title":"Good with Shaco","details":"TO DO: details!","score":1},{"name":"Warwick","title":"Good with Warwick","details":"TO DO: details!","score":1},{"name":"Xayah","title":"Good with Xayah","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Dr. Mundo","title":"Good against Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1},{"name":"Mordekaiser","title":"Good against Mordekaiser","details":"TO DO: details!","score":1}]},{"name":"Gangplank","goodWith":[{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Nunu","title":"Good with Nunu","details":"TO DO: details!","score":1},{"name":"Twisted Fate","title":"Good with Twisted Fate","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lissandra","title":"Good against Lissandra","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1}]},{"name":"Garen","goodWith":[{"name":"Lux","title":"Good with Lux","details":"TO DO: details!","score":1},{"name":"Darius","title":"Good with Darius","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Malphite","title":"Good against Malphite","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1},{"name":"Gangplank","title":"Good against Gangplank","details":"TO DO: details!","score":1}]},{"name":"Gnar","goodWith":[{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Braum","title":"Good with Braum","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1},{"name":"Yorick","title":"Good against Yorick","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good against Xin Zhao","details":"TO DO: details!","score":1}]},{"name":"Gragas","goodWith":[{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good with Malphite","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good against Lee Sin","details":"TO DO: details!","score":1},{"name":"Udyr","title":"Good against Udyr","details":"TO DO: details!","score":1}]},{"name":"Graves","goodWith":[{"name":"Taric","title":"Good with Taric","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Shyvana","title":"Good against Shyvana","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good against Olaf","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good against Xin Zhao","details":"TO DO: details!","score":1}]},{"name":"Hecarim","goodWith":[{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1},{"name":"Zilean","title":"Good with Zilean","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good with Malphite","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Wukong","title":"Good against Wukong","details":"TO DO: details!","score":1},{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Rek'Sai","title":"Good against Rek'Sai","details":"TO DO: details!","score":1}]},{"name":"Heimerdinger","goodWith":[{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Vi","title":"Good with Vi","details":"TO DO: details!","score":1},{"name":"Skarner","title":"Good with Skarner","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Illaoi","title":"Good against Illaoi","details":"TO DO: details!","score":1},{"name":"Camille","title":"Good against Camille","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1}]},{"name":"Illaoi","goodWith":[{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Camille","title":"Good with Camille","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1},{"name":"Jayce","title":"Good against Jayce","details":"TO DO: details!","score":1}]},{"name":"Irelia","goodWith":[{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1},{"name":"Riven","title":"Good with Riven","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good with Malphite","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nasus","title":"Good against Nasus","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1},{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1}]},{"name":"Ivern","goodWith":[{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Xayah","title":"Good with Xayah","details":"TO DO: details!","score":1},{"name":"Riven","title":"Good with Riven","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Udyr","title":"Good against Udyr","details":"TO DO: details!","score":1},{"name":"Fiddlesticks","title":"Good against Fiddlesticks","details":"TO DO: details!","score":1},{"name":"Shyvana","title":"Good against Shyvana","details":"TO DO: details!","score":1}]},{"name":"Janna","goodWith":[{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Draven","title":"Good with Draven","details":"TO DO: details!","score":1},{"name":"Ornn","title":"Good with Ornn","details":"TO DO: details!","score":1},{"name":"Urgot","title":"Good with Urgot","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Annie","title":"Good against Annie","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good against Taric","details":"TO DO: details!","score":1}]},{"name":"Jarvan IV","goodWith":[{"name":"Anivia","title":"Good with Anivia","details":"TO DO: details!","score":1},{"name":"Gnar","title":"Good with Gnar","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1},{"name":"Malzahar","title":"Good with Malzahar","details":"TO DO: details!","score":1},{"name":"Rumble","title":"Good with Rumble","details":"TO DO: details!","score":1},{"name":"Trundle","title":"Good with Trundle","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good with Viktor","details":"Jarvan IV can trap enemies within his ultimate which allows for Viktor's ultimate to maximize damage. Hard CC can be chained with Jarvan IV's CC dash and Viktor's gravitational field.","score":1},{"name":"Xerath","title":"Good with Xerath","details":"TO DO: details!","score":1},{"name":"Ziggs","title":"Good with Ziggs","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Rek'Sai","title":"Good against Rek'Sai","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good against Olaf","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good against Xin Zhao","details":"TO DO: details!","score":1}]},{"name":"Jax","goodWith":[{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1},{"name":"Dr. Mundo","title":"Good with Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Pantheon","title":"Good with Pantheon","details":"TO DO: details!","score":1},{"name":"Teemo","title":"Good with Teemo","details":"TO DO: details!","score":1},{"name":"Ryze","title":"Good with Ryze","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Tahm Kench","title":"Good against Tahm Kench","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1},{"name":"Ekko","title":"Good against Ekko","details":"TO DO: details!","score":1}]},{"name":"Jayce","goodWith":[{"name":"Nidalee","title":"Good with Nidalee","details":"TO DO: details!","score":1},{"name":"Skarner","title":"Good with Skarner","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Dr. Mundo","title":"Good against Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Urgot","title":"Good against Urgot","details":"TO DO: details!","score":1},{"name":"Cassiopeia","title":"Good against Cassiopeia","details":"TO DO: details!","score":1}]},{"name":"Jhin","goodWith":[{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Pyke","title":"Good with Pyke","details":"TO DO: details!","score":1},{"name":"Rakan","title":"Good with Rakan","details":"TO DO: details!","score":1},{"name":"Senna","title":"Good with Senna","details":"TO DO: details!","score":1},{"name":"Tahm Kench","title":"Good with Tahm Kench","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ezreal","title":"Good against Ezreal","details":"TO DO: details!","score":1},{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1}]},{"name":"Jinx","goodWith":[{"name":"Annie","title":"Good with Annie","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good with Karma","details":"TO DO: details!","score":1},{"name":"Lux","title":"Good with Lux","details":"TO DO: details!","score":1},{"name":"Morgana","title":"Good with Morgana","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1},{"name":"Tahm Kench","title":"Good with Tahm Kench","details":"TO DO: details!","score":1},{"name":"Yuumi","title":"Good with Yuumi","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Sivir","title":"Good against Sivir","details":"TO DO: details!","score":1},{"name":"Kalista","title":"Good against Kalista","details":"TO DO: details!","score":1},{"name":"Ashe","title":"Good against Ashe","details":"TO DO: details!","score":1}]},{"name":"Kai'Sa","goodWith":[{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Zac","title":"Good with Zac","details":"TO DO: details!","score":1},{"name":"Pyke","title":"Good with Pyke","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Kalista","title":"Good against Kalista","details":"TO DO: details!","score":1},{"name":"Ashe","title":"Good against Ashe","details":"TO DO: details!","score":1}]},{"name":"Kalista","goodWith":[{"name":"Tahm Kench","title":"Good with Tahm Kench","details":"TO DO: details!","score":1},{"name":"Alistar","title":"Good with Alistar","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1},{"name":"Varus","title":"Good against Varus","details":"TO DO: details!","score":1}]},{"name":"Karma","goodWith":[{"name":"Elise","title":"Good with Elise","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Veigar","title":"Good against Veigar","details":"TO DO: details!","score":1},{"name":"Zilean","title":"Good against Zilean","details":"TO DO: details!","score":1},{"name":"Morgana","title":"Good against Morgana","details":"TO DO: details!","score":1}]},{"name":"Karthus","goodWith":[{"name":"Kayle","title":"Good with Kayle","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Yorick","title":"Good with Yorick","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Yasuo","title":"Good against Yasuo","details":"TO DO: details!","score":1},{"name":"Twisted Fate","title":"Good against Twisted Fate","details":"TO DO: details!","score":1},{"name":"Kassadin","title":"Good against Kassadin","details":"TO DO: details!","score":1}]},{"name":"Kassadin","goodWith":[{"name":"Diana","title":"Good with Diana","details":"TO DO: details!","score":1},{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good with Lee Sin","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Azir","title":"Good against Azir","details":"Kassadin can close the gap between Azir and him very easily with his ultimate. If Azir uses his ultimate to get Kassadin off, Kassadin can use his ultimate again after a short delay to teleport right back to him.","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"LeBlanc","title":"Good against LeBlanc","details":"TO DO: details!","score":1},{"name":"Aurelion Sol","title":"Good against Aurelion Sol","details":"Kassadin will get near Aurelion Sol, exactly what he does not want. He also has a mage shield protecting his from some star damage. Kassadin will usually stay within the inner-layer of stars, so Aurelion Sol better be running!","score":1}]},{"name":"Katarina","goodWith":[{"name":"Akali","title":"Good with Akali","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Morgana","title":"Good with Morgana","details":"TO DO: details!","score":1},{"name":"Kayle","title":"Good with Kayle","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good with Malphite","details":"TO DO: details!","score":1},{"name":"Neeko","title":"Good with Neeko","details":"TO DO: details!","score":1},{"name":"Sejuani","title":"Good with Sejuani","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Syndra","title":"Good against Syndra","details":"TO DO: details!","score":1}]},{"name":"Kayle","goodWith":[{"name":"Karthus","title":"Good with Karthus","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1}]},{"name":"Kayn","goodWith":[],"goodAgainst":[]},{"name":"Kennen","goodWith":[{"name":"Fiddlesticks","title":"Good with Fiddlesticks","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Vladimir","title":"Good with Vladimir","details":"TO DO: details!","score":1},{"name":"Ziggs","title":"Good with Ziggs","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1},{"name":"Quinn","title":"Good against Quinn","details":"TO DO: details!","score":1},{"name":"Mordekaiser","title":"Good against Mordekaiser","details":"TO DO: details!","score":1}]},{"name":"Kha'Zix","goodWith":[{"name":"Rengar","title":"Good with Rengar","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good with Xin Zhao","details":"TO DO: details!","score":1},{"name":"Nasus","title":"Good with Nasus","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1},{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good against Olaf","details":"TO DO: details!","score":1}]},{"name":"Kindred","goodWith":[{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Sion","title":"Good with Sion","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good with Zed","details":"TO DO: details!","score":1},{"name":"Taliyah","title":"Good with Taliyah","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Rek'Sai","title":"Good against Rek'Sai","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good against Xin Zhao","details":"TO DO: details!","score":1},{"name":"Fiddlesticks","title":"Good against Fiddlesticks","details":"TO DO: details!","score":1}]},{"name":"Kled","goodWith":[{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Camille","title":"Good with Camille","details":"TO DO: details!","score":1},{"name":"Master Yi","title":"Good with Master Yi","details":"TO DO: details!","score":1},{"name":"Warwick","title":"Good with Warwick","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1},{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1},{"name":"Quinn","title":"Good against Quinn","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good against Azir","details":"Kled can completely destroy Azir with his ultimate or if he lands a pull with his hook. Kled's ultimate cannot be stopped, so Azir must get out of the way before it's too late.","score":1}]},{"name":"Kog'Maw","goodWith":[{"name":"Nunu","title":"Good with Nunu","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good against Jhin","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1}]},{"name":"LeBlanc","goodWith":[{"name":"Akali","title":"Good with Akali","details":"TO DO: details!","score":1},{"name":"Veigar","title":"Good with Veigar","details":"TO DO: details!","score":1},{"name":"Alistar","title":"Good with Alistar","details":"TO DO: details!","score":1},{"name":"Udyr","title":"Good with Udyr","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good against Viktor","details":"LeBlanc can get in and out very quickly. Viktor won't be able to land a stun with his gravitational field and landing his laser can be difficult when facinh a flashy enemy.","score":1}]},{"name":"Lee Sin","goodWith":[{"name":"Kassadin","title":"Good with Kassadin","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Teemo","title":"Good with Teemo","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good against Aatrox","details":"TO DO: details!","score":1},{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1}]},{"name":"Leona","goodWith":[{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Corki","title":"Good with Corki","details":"TO DO: details!","score":1},{"name":"Draven","title":"Good with Draven","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Graves","title":"Good with Graves","details":"TO DO: details!","score":1},{"name":"Jayce","title":"Good with Jayce","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good with Jhin","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Kai'Sa","title":"Good with Kai'Sa","details":"TO DO: details!","score":1},{"name":"Xayah","title":"Good with Xayah","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good with Lucian","details":"TO DO: details!","score":1},{"name":"Miss Fortune","title":"Good with Miss Fortune","details":"TO DO: details!","score":1},{"name":"Quinn","title":"Good with Quinn","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good with Sivir","details":"TO DO: details!","score":1},{"name":"Tristana","title":"Good with Tristana","details":"TO DO: details!","score":1},{"name":"Twitch","title":"Good with Twitch","details":"TO DO: details!","score":1},{"name":"Varus","title":"Good with Varus","details":"TO DO: details!","score":1},{"name":"Vel'Koz","title":"Good with Vel'Koz","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good against Lulu","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good against Nami","details":"TO DO: details!","score":1}]},{"name":"Lissandra","goodWith":[{"name":"Sejuani","title":"Good with Sejuani","details":"TO DO: details!","score":1},{"name":"Trundle","title":"Good with Trundle","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Veigar","title":"Good against Veigar","details":"TO DO: details!","score":1},{"name":"LeBlanc","title":"Good against LeBlanc","details":"TO DO: details!","score":1},{"name":"Cassiopeia","title":"Good against Cassiopeia","details":"TO DO: details!","score":1}]},{"name":"Lucian","goodWith":[{"name":"Annie","title":"Good with Annie","details":"TO DO: details!","score":1},{"name":"Braum","title":"Good with Braum","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Senna","title":"Good with Senna","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ezreal","title":"Good against Ezreal","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good against Vayne","details":"TO DO: details!","score":1},{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1}]},{"name":"Lulu","goodWith":[{"name":"Cho'Gath","title":"Good with Cho'Gath","details":"TO DO: details!","score":1},{"name":"Ekko","title":"Good with Ekko","details":"TO DO: details!","score":1},{"name":"Illaoi","title":"Good with Illaoi","details":"TO DO: details!","score":1},{"name":"Kog'Maw","title":"Good with Kog'Maw","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Ornn","title":"Good with Ornn","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Rakan","title":"Good against Rakan","details":"TO DO: details!","score":1},{"name":"Annie","title":"Good against Annie","details":"TO DO: details!","score":1}]},{"name":"Lux","goodWith":[{"name":"Garen","title":"Good with Garen","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Akali","title":"Good against Akali","details":"TO DO: details!","score":1}]},{"name":"Malphite","goodWith":[{"name":"Gragas","title":"Good with Gragas","details":"TO DO: details!","score":1},{"name":"Hecarim","title":"Good with Hecarim","details":"TO DO: details!","score":1},{"name":"Irelia","title":"Good with Irelia","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1},{"name":"Mordekaiser","title":"Good with Mordekaiser","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1},{"name":"Irelia","title":"Good against Irelia","details":"TO DO: details!","score":1}]},{"name":"Malzahar","goodWith":[{"name":"Warwick","title":"Good with Warwick","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good with Viktor","details":"Malzahar keeps enemies in one place with his ultimate, perfect for Viktor's ultimate! Landing a gravitional stun will allow Malzahar's summons to deal damage instead of chasing.","score":1}],"goodAgainst":[{"name":"Akali","title":"Good against Akali","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Vladimir","title":"Good against Vladimir","details":"TO DO: details!","score":1}]},{"name":"Maokai","goodWith":[{"name":"Brand","title":"Good with Brand","details":"TO DO: details!","score":1},{"name":"Ryze","title":"Good with Ryze","details":"TO DO: details!","score":1},{"name":"Vladimir","title":"Good with Vladimir","details":"TO DO: details!","score":1},{"name":"Swain","title":"Good with Swain","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1},{"name":"Gragas","title":"Good against Gragas","details":"TO DO: details!","score":1},{"name":"Kled","title":"Good against Kled","details":"TO DO: details!","score":1}]},{"name":"Master Yi","goodWith":[{"name":"Kled","title":"Good with Kled","details":"TO DO: details!","score":1},{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Trundle","title":"Good against Trundle","details":"TO DO: details!","score":1},{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1},{"name":"Wukong","title":"Good against Wukong","details":"TO DO: details!","score":1}]},{"name":"Miss Fortune","goodWith":[{"name":"Sona","title":"Good with Sona","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Pyke","title":"Good with Pyke","details":"TO DO: details!","score":1},{"name":"Rakan","title":"Good with Rakan","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good against Ezreal","details":"TO DO: details!","score":1},{"name":"Xayah","title":"Good against Xayah","details":"TO DO: details!","score":1}]},{"name":"Mordekaiser","goodWith":[{"name":"Yorick","title":"Good with Yorick","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good with Malphite","details":"TO DO: details!","score":1},{"name":"Wukong","title":"Good with Wukong","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good against Malphite","details":"TO DO: details!","score":1},{"name":"Irelia","title":"Good against Irelia","details":"TO DO: details!","score":1}]},{"name":"Morgana","goodWith":[{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Aurelion Sol","title":"Good with Aurelion Sol","details":"Morgana keeps the enemies at bay with her skillshot and ultimate. Spell shield may not be so useful on Aurelion Sol as it is not wise for him to get close to the enemies but can let him heard engage to clean up or chase down.","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Varus","title":"Good with Varus","details":"TO DO: details!","score":1},{"name":"Neeko","title":"Good with Neeko","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Veigar","title":"Good against Veigar","details":"TO DO: details!","score":1},{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Rakan","title":"Good against Rakan","details":"TO DO: details!","score":1}]},{"name":"Nami","goodWith":[{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Fizz","title":"Good with Fizz","details":"TO DO: details!","score":1},{"name":"Kog'Maw","title":"Good with Kog'Maw","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Quinn","title":"Good with Quinn","details":"TO DO: details!","score":1},{"name":"Syndra","title":"Good with Syndra","details":"TO DO: details!","score":1},{"name":"Varus","title":"Good with Varus","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Trundle","title":"Good against Trundle","details":"TO DO: details!","score":1},{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Rakan","title":"Good against Rakan","details":"TO DO: details!","score":1}]},{"name":"Nasus","goodWith":[{"name":"Kha'Zix","title":"Good with Kha'Zix","details":"TO DO: details!","score":1},{"name":"Renekton","title":"Good with Renekton","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good with Zed","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good against Malphite","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1}]},{"name":"Nautilus","goodWith":[{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Draven","title":"Good with Draven","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Shyvana","title":"Good with Shyvana","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Brand","title":"Good against Brand","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good against Leona","details":"TO DO: details!","score":1}]},{"name":"Neeko","goodWith":[{"name":"Morgana","title":"Good with Morgana","details":"TO DO: details!","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1},{"name":"Fiddlesticks","title":"Good with Fiddlesticks","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lee Sin","title":"Good against Lee Sin","details":"TO DO: details!","score":1},{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1},{"name":"Rek'Sai","title":"Good against Rek'Sai","details":"TO DO: details!","score":1}]},{"name":"Nidalee","goodWith":[{"name":"Jayce","title":"Good with Jayce","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Varus","title":"Good with Varus","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1},{"name":"Rek'Sai","title":"Good against Rek'Sai","details":"TO DO: details!","score":1}]},{"name":"Nocturne","goodWith":[{"name":"Twisted Fate","title":"Good with Twisted Fate","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good with Shen","details":"TO DO: details!","score":1},{"name":"Rengar","title":"Good with Rengar","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1},{"name":"Pantheon","title":"Good against Pantheon","details":"TO DO: details!","score":1},{"name":"Sejuani","title":"Good against Sejuani","details":"TO DO: details!","score":1}]},{"name":"Nunu","goodWith":[{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Gangplank","title":"Good with Gangplank","details":"TO DO: details!","score":1},{"name":"Kog'Maw","title":"Good with Kog'Maw","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Skarner","title":"Good against Skarner","details":"TO DO: details!","score":1},{"name":"Shyvana","title":"Good against Shyvana","details":"TO DO: details!","score":1}]},{"name":"Olaf","goodWith":[{"name":"Darius","title":"Good with Darius","details":"TO DO: details!","score":1},{"name":"Dr. Mundo","title":"Good with Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Fiddlesticks","title":"Good against Fiddlesticks","details":"TO DO: details!","score":1},{"name":"Hecarim","title":"Good against Hecarim","details":"TO DO: details!","score":1},{"name":"Shaco","title":"Good against Shaco","details":"TO DO: details!","score":1}]},{"name":"Orianna","goodWith":[{"name":"Evelynn","title":"Good with Evelynn","details":"TO DO: details!","score":1},{"name":"Hecarim","title":"Good with Hecarim","details":"TO DO: details!","score":1},{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good with Malphite","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Rengar","title":"Good with Rengar","details":"TO DO: details!","score":1},{"name":"Vi","title":"Good with Vi","details":"TO DO: details!","score":1},{"name":"Zac","title":"Good with Zac","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Gangplank","title":"Good against Gangplank","details":"TO DO: details!","score":1},{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1}]},{"name":"Ornn","goodWith":[{"name":"Janna","title":"Good with Janna","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good against Malphite","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1}]},{"name":"Pantheon","goodWith":[{"name":"Jax","title":"Good with Jax","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good with Taric","details":"TO DO: details!","score":1},{"name":"Sion","title":"Good with Sion","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good with Xin Zhao","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Dr. Mundo","title":"Good against Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Nasus","title":"Good against Nasus","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1}]},{"name":"Poppy","goodWith":[{"name":"Sion","title":"Good with Sion","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Cho'Gath","title":"Good with Cho'Gath","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Illaoi","title":"Good against Illaoi","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good against Olaf","details":"TO DO: details!","score":1},{"name":"Kled","title":"Good against Kled","details":"TO DO: details!","score":1}]},{"name":"Pyke","goodWith":[{"name":"Miss Fortune","title":"Good with Miss Fortune","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good with Jhin","details":"TO DO: details!","score":1},{"name":"Kai'Sa","title":"Good with Kai'Sa","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Vel'Koz","title":"Good against Vel'Koz","details":"TO DO: details!","score":1},{"name":"Zoe","title":"Good against Zoe","details":"TO DO: details!","score":1},{"name":"Annie","title":"Good against Annie","details":"TO DO: details!","score":1}]},{"name":"Qiyana","goodWith":[],"goodAgainst":[{"name":"Xerath","title":"Good against Xerath","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good against Viktor","details":"TO DO: details!","score":1},{"name":"Neeko","title":"Good against Neeko","details":"TO DO: details!","score":1}]},{"name":"Quinn","goodWith":[{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1},{"name":"Xerath","title":"Good with Xerath","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Tryndamere","title":"Good against Tryndamere","details":"TO DO: details!","score":1},{"name":"Jax","title":"Good against Jax","details":"TO DO: details!","score":1},{"name":"Renekton","title":"Good against Renekton","details":"TO DO: details!","score":1}]},{"name":"Rakan","goodWith":[{"name":"Xayah","title":"Good with Xayah","details":"TO DO: details!","score":1},{"name":"Miss Fortune","title":"Good with Miss Fortune","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good with Jhin","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Tahm Kench","title":"Good against Tahm Kench","details":"TO DO: details!","score":1}]},{"name":"Rammus","goodWith":[],"goodAgainst":[]},{"name":"Rek'Sai","goodWith":[],"goodAgainst":[]},{"name":"Renekton","goodWith":[{"name":"Nasus","title":"Good with Nasus","details":"TO DO: details!","score":1}],"goodAgainst":[]},{"name":"Rengar","goodWith":[{"name":"Elise","title":"Good with Elise","details":"TO DO: details!","score":1},{"name":"Kha'Zix","title":"Good with Kha'Zix","details":"TO DO: details!","score":1},{"name":"Nocturne","title":"Good with Nocturne","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Shyvana","title":"Good against Shyvana","details":"TO DO: details!","score":1},{"name":"Vi","title":"Good against Vi","details":"TO DO: details!","score":1},{"name":"Evelynn","title":"Good against Evelynn","details":"TO DO: details!","score":1}]},{"name":"Riven","goodWith":[{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1},{"name":"Irelia","title":"Good with Irelia","details":"TO DO: details!","score":1},{"name":"Ivern","title":"Good with Ivern","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Volibear","title":"Good against Volibear","details":"TO DO: details!","score":1},{"name":"Tahm Kench","title":"Good against Tahm Kench","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1}]},{"name":"Rumble","goodWith":[{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Sona","title":"Good with Sona","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Dr. Mundo","title":"Good against Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Nasus","title":"Good against Nasus","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good against Malphite","details":"TO DO: details!","score":1}]},{"name":"Ryze","goodWith":[{"name":"Maokai","title":"Good with Maokai","details":"TO DO: details!","score":1},{"name":"Jax","title":"Good with Jax","details":"TO DO: details!","score":1},{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1},{"name":"Udyr","title":"Good with Udyr","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ekko","title":"Good against Ekko","details":"TO DO: details!","score":1},{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Kassadin","title":"Good against Kassadin","details":"TO DO: details!","score":1}]},{"name":"Sejuani","goodWith":[{"name":"Lissandra","title":"Good with Lissandra","details":"TO DO: details!","score":1},{"name":"Talon","title":"Good with Talon","details":"TO DO: details!","score":1},{"name":"Katarina","title":"Good with Katarina","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Rammus","title":"Good against Rammus","details":"TO DO: details!","score":1},{"name":"Shyvana","title":"Good against Shyvana","details":"TO DO: details!","score":1},{"name":"Volibear","title":"Good against Volibear","details":"TO DO: details!","score":1}]},{"name":"Senna","goodWith":[{"name":"Lucian","title":"Good with Lucian","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good with Jhin","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Janna","title":"Good against Janna","details":"TO DO: details!","score":1},{"name":"Bard","title":"Good against Bard","details":"TO DO: details!","score":1}]},{"name":"Sett","goodWith":[],"goodAgainst":[{"name":"Yasuo","title":"Good against Yasuo","details":"TO DO: details!","score":1},{"name":"Camille","title":"Good against Camille","details":"TO DO: details!","score":1}]},{"name":"Shaco","goodWith":[{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Talon","title":"Good with Talon","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Udyr","title":"Good against Udyr","details":"TO DO: details!","score":1},{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Jax","title":"Good against Jax","details":"TO DO: details!","score":1}]},{"name":"Shen","goodWith":[{"name":"Evelynn","title":"Good with Evelynn","details":"TO DO: details!","score":1},{"name":"Nocturne","title":"Good with Nocturne","details":"TO DO: details!","score":1},{"name":"Twisted Fate","title":"Good with Twisted Fate","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good with Zed","details":"TO DO: details!","score":1},{"name":"Akali","title":"Good with Akali","details":"TO DO: details!","score":1},{"name":"Shyvana","title":"Good with Shyvana","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Tahm Kench","title":"Good against Tahm Kench","details":"TO DO: details!","score":1},{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1},{"name":"Gragas","title":"Good against Gragas","details":"TO DO: details!","score":1}]},{"name":"Shyvana","goodWith":[{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good with Shen","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good with Nautilus","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nocturne","title":"Good against Nocturne","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good against Lee Sin","details":"TO DO: details!","score":1},{"name":"Hecarim","title":"Good against Hecarim","details":"TO DO: details!","score":1}]},{"name":"Singed","goodWith":[{"name":"Cassiopeia","title":"Good with Cassiopeia","details":"TO DO: details!","score":1},{"name":"Volibear","title":"Good with Volibear","details":"TO DO: details!","score":1},{"name":"Teemo","title":"Good with Teemo","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1},{"name":"Jax","title":"Good against Jax","details":"TO DO: details!","score":1},{"name":"Illaoi","title":"Good against Illaoi","details":"TO DO: details!","score":1}]},{"name":"Sion","goodWith":[{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Kindred","title":"Good with Kindred","details":"TO DO: details!","score":1},{"name":"Pantheon","title":"Good with Pantheon","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good with Poppy","details":"TO DO: details!","score":1},{"name":"Talon","title":"Good with Talon","details":"TO DO: details!","score":1},{"name":"Wukong","title":"Good with Wukong","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Illaoi","title":"Good against Illaoi","details":"TO DO: details!","score":1},{"name":"Nasus","title":"Good against Nasus","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1}]},{"name":"Sivir","goodWith":[{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Soraka","title":"Good with Soraka","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good with Taric","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ezreal","title":"Good against Ezreal","details":"TO DO: details!","score":1},{"name":"Xayah","title":"Good against Xayah","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1}]},{"name":"Skarner","goodWith":[{"name":"Jayce","title":"Good with Jayce","details":"TO DO: details!","score":1},{"name":"Heimerdinger","title":"Good with Heimerdinger","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nocturne","title":"Good against Nocturne","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good against Olaf","details":"TO DO: details!","score":1},{"name":"Shaco","title":"Good against Shaco","details":"TO DO: details!","score":1}]},{"name":"Sona","goodWith":[{"name":"Brand","title":"Good with Brand","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Miss Fortune","title":"Good with Miss Fortune","details":"TO DO: details!","score":1},{"name":"Rumble","title":"Good with Rumble","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good with Viktor","details":"Sona makes is easy to cast a good ultimate, the move speed she gives you can be used for poking, like a hit and run.","score":1},{"name":"Xayah","title":"Good with Xayah","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Vel'Koz","title":"Good against Vel'Koz","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good against Lulu","details":"TO DO: details!","score":1}]},{"name":"Soraka","goodWith":[{"name":"Sivir","title":"Good with Sivir","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Urgot","title":"Good with Urgot","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Veigar","title":"Good against Veigar","details":"TO DO: details!","score":1},{"name":"Morgana","title":"Good against Morgana","details":"TO DO: details!","score":1},{"name":"Vel'Koz","title":"Good against Vel'Koz","details":"TO DO: details!","score":1}]},{"name":"Swain","goodWith":[{"name":"Maokai","title":"Good with Maokai","details":"TO DO: details!","score":1},{"name":"Vladimir","title":"Good with Vladimir","details":"TO DO: details!","score":1},{"name":"Alistar","title":"Good with Alistar","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Illaoi","title":"Good against Illaoi","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good against Shen","details":"TO DO: details!","score":1},{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1}]},{"name":"Sylas","goodWith":[],"goodAgainst":[{"name":"Zoe","title":"Good against Zoe","details":"TO DO: details!","score":1},{"name":"Xerath","title":"Good against Xerath","details":"TO DO: details!","score":1},{"name":"Swain","title":"Good against Swain","details":"TO DO: details!","score":1}]},{"name":"Syndra","goodWith":[{"name":"Zac","title":"Good with Zac","details":"TO DO: details!","score":1},{"name":"Zilean","title":"Good with Zilean","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1},{"name":"Kennen","title":"Good against Kennen","details":"TO DO: details!","score":1}]},{"name":"Tahm Kench","goodWith":[{"name":"Kalista","title":"Good with Kalista","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good with Jhin","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good against Taric","details":"TO DO: details!","score":1},{"name":"Brand","title":"Good against Brand","details":"TO DO: details!","score":1}]},{"name":"Taliyah","goodWith":[{"name":"Talon","title":"Good with Talon","details":"TO DO: details!","score":1},{"name":"Twisted Fate","title":"Good with Twisted Fate","details":"TO DO: details!","score":1},{"name":"Kindred","title":"Good with Kindred","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Veigar","title":"Good against Veigar","details":"TO DO: details!","score":1},{"name":"Syndra","title":"Good against Syndra","details":"TO DO: details!","score":1}]},{"name":"Talon","goodWith":[{"name":"Fizz","title":"Good with Fizz","details":"TO DO: details!","score":1},{"name":"Sejuani","title":"Good with Sejuani","details":"TO DO: details!","score":1},{"name":"Shaco","title":"Good with Shaco","details":"TO DO: details!","score":1},{"name":"Sion","title":"Good with Sion","details":"TO DO: details!","score":1},{"name":"Taliyah","title":"Good with Taliyah","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good with Zed","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Lissandra","title":"Good against Lissandra","details":"TO DO: details!","score":1},{"name":"Ekko","title":"Good against Ekko","details":"TO DO: details!","score":1}]},{"name":"Taric","goodWith":[{"name":"Ezreal","title":"Good with Ezreal","details":"TO DO: details!","score":1},{"name":"Graves","title":"Good with Graves","details":"TO DO: details!","score":1},{"name":"Pantheon","title":"Good with Pantheon","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good with Sivir","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Twitch","title":"Good with Twitch","details":"TO DO: details!","score":1},{"name":"Urgot","title":"Good with Urgot","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Leona","title":"Good against Leona","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good against Lulu","details":"TO DO: details!","score":1}]},{"name":"Teemo","goodWith":[{"name":"Azir","title":"Good with Azir","details":"Azir rather use his soliders to attack, Teemo's blind is ineffective. Teemo's shrooms can be annoying, Azir should equip himself with a red flare.","score":1},{"name":"Cassiopeia","title":"Good with Cassiopeia","details":"TO DO: details!","score":1},{"name":"Jax","title":"Good with Jax","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good with Lee Sin","details":"TO DO: details!","score":1},{"name":"Singed","title":"Good with Singed","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Volibear","title":"Good with Volibear","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1},{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1}]},{"name":"Thresh","goodWith":[{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Camille","title":"Good with Camille","details":"TO DO: details!","score":1},{"name":"Corki","title":"Good with Corki","details":"TO DO: details!","score":1},{"name":"Draven","title":"Good with Draven","details":"TO DO: details!","score":1},{"name":"Graves","title":"Good with Graves","details":"TO DO: details!","score":1},{"name":"Heimerdinger","title":"Good with Heimerdinger","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good with Jhin","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1},{"name":"Kai'Sa","title":"Good with Kai'Sa","details":"TO DO: details!","score":1},{"name":"Kalista","title":"Good with Kalista","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good with Lucian","details":"TO DO: details!","score":1},{"name":"Ornn","title":"Good with Ornn","details":"TO DO: details!","score":1},{"name":"Quinn","title":"Good with Quinn","details":"TO DO: details!","score":1},{"name":"Skarner","title":"Good with Skarner","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Tristana","title":"Good with Tristana","details":"TO DO: details!","score":1},{"name":"Varus","title":"Good with Varus","details":"TO DO: details!","score":1},{"name":"Zoe","title":"Good with Zoe","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good against Karma","details":"TO DO: details!","score":1},{"name":"Veigar","title":"Good against Veigar","details":"TO DO: details!","score":1}]},{"name":"Tristana","goodWith":[{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Alistar","title":"Good with Alistar","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Kalista","title":"Good against Kalista","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1}]},{"name":"Trundle","goodWith":[{"name":"Lissandra","title":"Good with Lissandra","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1},{"name":"Sion","title":"Good against Sion","details":"TO DO: details!","score":1},{"name":"Nasus","title":"Good against Nasus","details":"TO DO: details!","score":1}]},{"name":"Tryndamere","goodWith":[{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1},{"name":"Zilean","title":"Good with Zilean","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nautilus","title":"Good against Nautilus","details":"TO DO: details!","score":1},{"name":"Cho'Gath","title":"Good against Cho'Gath","details":"TO DO: details!","score":1},{"name":"Garen","title":"Good against Garen","details":"TO DO: details!","score":1}]},{"name":"Twisted Fate","goodWith":[{"name":"Gangplank","title":"Good with Gangplank","details":"TO DO: details!","score":1},{"name":"Nocturne","title":"Good with Nocturne","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good with Shen","details":"TO DO: details!","score":1},{"name":"Taliyah","title":"Good with Taliyah","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Akali","title":"Good against Akali","details":"TO DO: details!","score":1},{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1}]},{"name":"Twitch","goodWith":[{"name":"Braum","title":"Good with Braum","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good with Taric","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good against Sivir","details":"TO DO: details!","score":1},{"name":"Kalista","title":"Good against Kalista","details":"TO DO: details!","score":1}]},{"name":"Udyr","goodWith":[{"name":"Ahri","title":"Good with Ahri","details":"TO DO: details!","score":1},{"name":"Ryze","title":"Good with Ryze","details":"TO DO: details!","score":1},{"name":"LeBlanc","title":"Good with LeBlanc","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Graves","title":"Good against Graves","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good against Lee Sin","details":"TO DO: details!","score":1},{"name":"Nidalee","title":"Good against Nidalee","details":"TO DO: details!","score":1}]},{"name":"Urgot","goodWith":[{"name":"Soraka","title":"Good with Soraka","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good with Taric","details":"TO DO: details!","score":1},{"name":"Janna","title":"Good with Janna","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Jarvan IV","title":"Good against Jarvan IV","details":"TO DO: details!","score":1},{"name":"Fiora","title":"Good against Fiora","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good against Sivir","details":"TO DO: details!","score":1}]},{"name":"Varus","goodWith":[{"name":"Morgana","title":"Good with Morgana","details":"TO DO: details!","score":1},{"name":"Nidalee","title":"Good with Nidalee","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1},{"name":"Xerath","title":"Good with Xerath","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good against Sivir","details":"TO DO: details!","score":1},{"name":"Ashe","title":"Good against Ashe","details":"TO DO: details!","score":1}]},{"name":"Vayne","goodWith":[{"name":"Anivia","title":"Good with Anivia","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1},{"name":"Karma","title":"Good with Karma","details":"TO DO: details!","score":1},{"name":"Lulu","title":"Good with Lulu","details":"TO DO: details!","score":1},{"name":"Nami","title":"Good with Nami","details":"TO DO: details!","score":1},{"name":"Nunu","title":"Good with Nunu","details":"TO DO: details!","score":1},{"name":"Poppy","title":"Good with Poppy","details":"TO DO: details!","score":1},{"name":"Senna","title":"Good with Senna","details":"TO DO: details!","score":1},{"name":"Taric","title":"Good with Taric","details":"TO DO: details!","score":1},{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Trundle","title":"Good with Trundle","details":"TO DO: details!","score":1},{"name":"Yorick","title":"Good with Yorick","details":"TO DO: details!","score":1},{"name":"Yuumi","title":"Good with Yuumi","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ziggs","title":"Good against Ziggs","details":"TO DO: details!","score":1},{"name":"Sivir","title":"Good against Sivir","details":"TO DO: details!","score":1},{"name":"Jhin","title":"Good against Jhin","details":"TO DO: details!","score":1}]},{"name":"Veigar","goodWith":[{"name":"LeBlanc","title":"Good with LeBlanc","details":"TO DO: details!","score":1},{"name":"Warwick","title":"Good with Warwick","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Diana","title":"Good against Diana","details":"TO DO: details!","score":1},{"name":"Talon","title":"Good against Talon","details":"TO DO: details!","score":1},{"name":"Akali","title":"Good against Akali","details":"TO DO: details!","score":1}]},{"name":"Vel'Koz","goodWith":[{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Swain","title":"Good against Swain","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good against Viktor","details":"TO DO: details!","score":1}]},{"name":"Vi","goodWith":[{"name":"Heimerdinger","title":"Good with Heimerdinger","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good with Zed","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nidalee","title":"Good against Nidalee","details":"TO DO: details!","score":1},{"name":"Shaco","title":"Good against Shaco","details":"TO DO: details!","score":1},{"name":"Elise","title":"Good against Elise","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good against Azir","details":"Vi can cast her ultimate on Azir and there is no way she can be stopped. Vi has a dash that can close the gap between her and Azir, making Azir's attack futile which he gets punched in the face.","score":1}]},{"name":"Viktor","goodWith":[{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"Jarvan IV can trap enemies within his ultimate which allows for Viktor's ultimate to maximize damage. Hard CC can be chained with Jarvan IV's CC dash and Viktor's gravitational field.","score":1},{"name":"Sona","title":"Good with Sona","details":"Sona makes is easy to cast a good ultimate, the move speed she gives you can be used for poking, like a hit and run.","score":1},{"name":"Malzahar","title":"Good with Malzahar","details":"Malzahar keeps enemies in one place with his ultimate, perfect for Viktor's ultimate! Landing a gravitional stun will allow Malzahar's summons to deal damage instead of chasing.","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"Viktor's ultimate can cancel Ryze's ultimate (I think?). Viktor's range is further than Ryze's.","score":1},{"name":"Katarina","title":"Good against Katarina","details":"Viktor can cancel Katarina's ultimate with his ultimate. Katarina must be moving or she will be stunned in Viktor's gravitational field. A good Katarina can avoid this, but in low-elo, most don't predict the ultimate cancel.","score":1}]},{"name":"Vladimir","goodWith":[{"name":"Kennen","title":"Good with Kennen","details":"TO DO: details!","score":1},{"name":"Maokai","title":"Good with Maokai","details":"TO DO: details!","score":1},{"name":"Swain","title":"Good with Swain","details":"TO DO: details!","score":1},{"name":"Zed","title":"Good with Zed","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Gangplank","title":"Good against Gangplank","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good against Yasuo","details":"TO DO: details!","score":1}]},{"name":"Volibear","goodWith":[{"name":"Fiora","title":"Good with Fiora","details":"TO DO: details!","score":1},{"name":"Singed","title":"Good with Singed","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Teemo","title":"Good with Teemo","details":"TO DO: details!","score":1},{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Hecarim","title":"Good against Hecarim","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good against Lee Sin","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good against Amumu","details":"TO DO: details!","score":1}]},{"name":"Warwick","goodWith":[{"name":"Malzahar","title":"Good with Malzahar","details":"TO DO: details!","score":1},{"name":"Veigar","title":"Good with Veigar","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Kled","title":"Good with Kled","details":"TO DO: details!","score":1},{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Poppy","title":"Good against Poppy","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good against Lee Sin","details":"TO DO: details!","score":1},{"name":"Skarner","title":"Good against Skarner","details":"TO DO: details!","score":1}]},{"name":"Wukong","goodWith":[{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1},{"name":"Mordekaiser","title":"Good with Mordekaiser","details":"TO DO: details!","score":1},{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Sion","title":"Good with Sion","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Gragas","title":"Good against Gragas","details":"TO DO: details!","score":1},{"name":"Trundle","title":"Good against Trundle","details":"TO DO: details!","score":1},{"name":"Jayce","title":"Good against Jayce","details":"TO DO: details!","score":1},{"name":"Aurelion Sol","title":"Good against Aurelion Sol","details":"Wukong can up into Aurelion Sol's face and keep there with his ultimate. Wukong can close the gap easily with his dash, and he can get close by using his invisibility when he makes a clone.","score":1}]},{"name":"Xayah","goodWith":[{"name":"Ivern","title":"Good with Ivern","details":"TO DO: details!","score":1},{"name":"Leona","title":"Good with Leona","details":"TO DO: details!","score":1},{"name":"Rakan","title":"Good with Rakan","details":"TO DO: details!","score":1},{"name":"Sona","title":"Good with Sona","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good with Galio","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Corki","title":"Good against Corki","details":"TO DO: details!","score":1},{"name":"Lucian","title":"Good against Lucian","details":"TO DO: details!","score":1},{"name":"Kalista","title":"Good against Kalista","details":"TO DO: details!","score":1}]},{"name":"Xerath","goodWith":[{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Quinn","title":"Good with Quinn","details":"TO DO: details!","score":1},{"name":"Varus","title":"Good with Varus","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Lissandra","title":"Good against Lissandra","details":"TO DO: details!","score":1},{"name":"Viktor","title":"Good against Viktor","details":"TO DO: details!","score":1}]},{"name":"Xin Zhao","goodWith":[{"name":"Kha'Zix","title":"Good with Kha'Zix","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Pantheon","title":"Good with Pantheon","details":"TO DO: details!","score":1},{"name":"Blitzcrank","title":"Good with Blitzcrank","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Rengar","title":"Good against Rengar","details":"TO DO: details!","score":1},{"name":"Olaf","title":"Good against Olaf","details":"TO DO: details!","score":1},{"name":"Nocturne","title":"Good against Nocturne","details":"TO DO: details!","score":1}]},{"name":"Yasuo","goodWith":[{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good with Azir","details":"Azir can sending multiple enemies flying with his ultimate, perfect for Yasuo to follow up.","score":1},{"name":"Cho'Gath","title":"Good with Cho'Gath","details":"TO DO: details!","score":1},{"name":"Diana","title":"Good with Diana","details":"TO DO: details!","score":1},{"name":"Gragas","title":"Good with Gragas","details":"TO DO: details!","score":1},{"name":"Ivern","title":"Good with Ivern","details":"TO DO: details!","score":1},{"name":"Janna","title":"Good with Janna","details":"TO DO: details!","score":1},{"name":"Lee Sin","title":"Good with Lee Sin","details":"TO DO: details!","score":1},{"name":"Malphite","title":"Good with Malphite","details":"TO DO: details!","score":1},{"name":"Nautilus","title":"Good with Nautilus","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1},{"name":"Riven","title":"Good with Riven","details":"TO DO: details!","score":1},{"name":"Shyvana","title":"Good with Shyvana","details":"TO DO: details!","score":1},{"name":"Vi","title":"Good with Vi","details":"TO DO: details!","score":1},{"name":"Volibear","title":"Good with Volibear","details":"TO DO: details!","score":1},{"name":"Xin Zhao","title":"Good with Xin Zhao","details":"TO DO: details!","score":1},{"name":"Wukong","title":"Good with Wukong","details":"TO DO: details!","score":1},{"name":"Alistar","title":"Good with Alistar","details":"TO DO: details!","score":1},{"name":"Zac","title":"Good with Zac","details":"TO DO: details!","score":1},{"name":"Zyra","title":"Good with Zyra","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Dr. Mundo","title":"Good against Dr. Mundo","details":"TO DO: details!","score":1},{"name":"Yorick","title":"Good against Yorick","details":"TO DO: details!","score":1},{"name":"Galio","title":"Good against Galio","details":"TO DO: details!","score":1}]},{"name":"Yorick","goodWith":[{"name":"Cassiopeia","title":"Good with Cassiopeia","details":"TO DO: details!","score":1},{"name":"Karthus","title":"Good with Karthus","details":"TO DO: details!","score":1},{"name":"Mordekaiser","title":"Good with Mordekaiser","details":"TO DO: details!","score":1},{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Nasus","title":"Good against Nasus","details":"TO DO: details!","score":1},{"name":"Kennen","title":"Good against Kennen","details":"TO DO: details!","score":1},{"name":"Vladimir","title":"Good against Vladimir","details":"TO DO: details!","score":1}]},{"name":"Yuumi","goodWith":[{"name":"Vayne","title":"Good with Vayne","details":"TO DO: details!","score":1},{"name":"Caitlyn","title":"Good with Caitlyn","details":"TO DO: details!","score":1},{"name":"Jinx","title":"Good with Jinx","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Annie","title":"Good against Annie","details":"TO DO: details!","score":1},{"name":"Ezreal","title":"Good against Ezreal","details":"TO DO: details!","score":1}]},{"name":"Zac","goodWith":[{"name":"Kai'Sa","title":"Good with Kai'Sa","details":"TO DO: details!","score":1},{"name":"Syndra","title":"Good with Syndra","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good with Orianna","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Wukong","title":"Good against Wukong","details":"TO DO: details!","score":1},{"name":"Trundle","title":"Good against Trundle","details":"TO DO: details!","score":1},{"name":"Skarner","title":"Good against Skarner","details":"TO DO: details!","score":1}]},{"name":"Zed","goodWith":[{"name":"Kindred","title":"Good with Kindred","details":"TO DO: details!","score":1},{"name":"Nasus","title":"Good with Nasus","details":"TO DO: details!","score":1},{"name":"Shen","title":"Good with Shen","details":"TO DO: details!","score":1},{"name":"Talon","title":"Good with Talon","details":"TO DO: details!","score":1},{"name":"Vladimir","title":"Good with Vladimir","details":"TO DO: details!","score":1},{"name":"Vi","title":"Good with Vi","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1},{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Taliyah","title":"Good against Taliyah","details":"TO DO: details!","score":1}]},{"name":"Ziggs","goodWith":[{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1},{"name":"Jarvan IV","title":"Good with Jarvan IV","details":"TO DO: details!","score":1},{"name":"Kennen","title":"Good with Kennen","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Aurelion Sol","title":"Good against Aurelion Sol","details":"TO DO: details!","score":1},{"name":"Gangplank","title":"Good against Gangplank","details":"TO DO: details!","score":1},{"name":"Cassiopeia","title":"Good against Cassiopeia","details":"TO DO: details!","score":1}]},{"name":"Zilean","goodWith":[{"name":"Hecarim","title":"Good with Hecarim","details":"TO DO: details!","score":1},{"name":"Syndra","title":"Good with Syndra","details":"TO DO: details!","score":1},{"name":"Tryndamere","title":"Good with Tryndamere","details":"TO DO: details!","score":1},{"name":"Aatrox","title":"Good with Aatrox","details":"TO DO: details!","score":1},{"name":"Zoe","title":"Good with Zoe","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Braum","title":"Good against Braum","details":"TO DO: details!","score":1},{"name":"Alistar","title":"Good against Alistar","details":"TO DO: details!","score":1},{"name":"Zyra","title":"Good against Zyra","details":"TO DO: details!","score":1}]},{"name":"Zoe","goodWith":[{"name":"Thresh","title":"Good with Thresh","details":"TO DO: details!","score":1},{"name":"Bard","title":"Good with Bard","details":"TO DO: details!","score":1},{"name":"Zilean","title":"Good with Zilean","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Azir","title":"Good against Azir","details":"TO DO: details!","score":1},{"name":"Orianna","title":"Good against Orianna","details":"TO DO: details!","score":1},{"name":"Ryze","title":"Good against Ryze","details":"TO DO: details!","score":1}]},{"name":"Zyra","goodWith":[{"name":"Ashe","title":"Good with Ashe","details":"TO DO: details!","score":1},{"name":"Yasuo","title":"Good with Yasuo","details":"TO DO: details!","score":1},{"name":"Amumu","title":"Good with Amumu","details":"TO DO: details!","score":1}],"goodAgainst":[{"name":"Lux","title":"Good against Lux","details":"TO DO: details!","score":1},{"name":"Bard","title":"Good against Bard","details":"TO DO: details!","score":1},{"name":"Annie","title":"Good against Annie","details":"TO DO: details!","score":1}]}]`));
 })();
