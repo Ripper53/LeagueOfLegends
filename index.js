@@ -5,6 +5,31 @@ class ChampionInfo {
         this.description = description;
         this.score = score;
     }
+    static load(info, title, color, w, readOnly) {
+        const pInfo = document.createElement('p');
+        const strongTitle = document.createElement('strong');
+        pInfo.appendChild(strongTitle);
+        strongTitle.textContent = title + info.champion.name;
+        strongTitle.style.color = color;
+        strongTitle.style.fontFamily = defaultValue.fontFamily;
+        const img = document.createElement('img');
+        pInfo.appendChild(img);
+        img.style.width = "25px";
+        img.style.height = "25px";
+        img.src = info.champion.getImageSrcPath();
+        const descriptionParagraph = document.createElement('textarea');
+        pInfo.appendChild(descriptionParagraph);
+        descriptionParagraph.style.display = "block";
+        descriptionParagraph.textContent += info.description;
+        descriptionParagraph.style.width = (w - 50) + "px";
+        descriptionParagraph.style.height = "100px";
+        descriptionParagraph.readOnly = readOnly;
+        descriptionParagraph.style.resize = "none";
+        descriptionParagraph.addEventListener('input', () => {
+            info.description = descriptionParagraph.value;
+        });
+        return pInfo;
+    }
 }
 var Role;
 (function (Role) {
@@ -73,20 +98,23 @@ class Champion {
         return getImagePath(this.src);
     }
     addChampionInfo(infos, oppositeInfos, champion, description, championInfo, oppositeInfo) {
+        let added = false;
         const info = infos.find(v => v.champion === champion);
         if (info === undefined) {
             infos.push(championInfo);
+            added = true;
         }
         const opInfo = oppositeInfos.find(v => v.champion === this);
         if (opInfo === undefined) {
             oppositeInfos.push(oppositeInfo);
         }
+        return added;
     }
     addGoodAgainst(champion, description, score = 1) {
-        this.addChampionInfo(this.goodAgainst, champion.badAgainst, champion, description, new ChampionInfo(champion, "Good against " + champion.name, description, score), new ChampionInfo(this, "Bad against " + this.name, description, score));
+        return this.addChampionInfo(this.goodAgainst, champion.badAgainst, champion, description, new ChampionInfo(champion, "Good against " + champion.name, description, score), new ChampionInfo(this, "Bad against " + this.name, description, score));
     }
     addGoodWith(champion, description, score = 1) {
-        this.addChampionInfo(this.goodWith, champion.goodWith, champion, description, new ChampionInfo(champion, "Good with " + champion.name, description, score), new ChampionInfo(this, "Good with " + this.name, description, score));
+        return this.addChampionInfo(this.goodWith, champion.goodWith, champion, description, new ChampionInfo(champion, "Good with " + champion.name, description, score), new ChampionInfo(this, "Good with " + this.name, description, score));
     }
     clear() {
         this.goodAgainst.length = 0;
@@ -96,12 +124,6 @@ class Champion {
     }
 }
 Champion.ALL = [];
-class ChampionScore {
-    constructor() {
-        this.champions = [];
-        this.score = 0;
-    }
-}
 class UIEvents {
 }
 class UIElementEvents extends UIEvents {
@@ -154,15 +176,15 @@ class UI {
         document.body.style.padding = "0px";
         document.body.style.margin = "0px";
         document.body.style.position = "fixed";
+        document.body.style.width = "100%";
+        document.body.style.height = "100%";
         this.body = document.createElement('div');
         this.body.style.position = "fixed";
-        this.body.style.width = "100%";
-        this.body.style.height = "100%";
         this.body.style.backgroundColor = "transparent";
         document.body.appendChild(this.body);
         this.addOnResize(() => {
-            document.body.style.width = window.innerWidth + "px";
-            document.body.style.height = window.innerHeight + "px";
+            this.body.style.width = window.innerWidth + "px";
+            this.body.style.height = window.innerHeight + "px";
         });
     }
     static getPercentage(value, maxValue) {
@@ -198,6 +220,23 @@ class UIElement extends UI {
         return this.events;
     }
 }
+class SelectUI extends UIElement {
+    constructor() {
+        super(document.createElement('select'));
+    }
+    addOption(text) {
+        const op = document.createElement('option');
+        this.modifyElement.appendChild(op);
+        op.textContent = text;
+        return op;
+    }
+    getOption(index) {
+        return this.modifyElement.options[index];
+    }
+    get length() {
+        return this.modifyElement.options.length;
+    }
+}
 class ImageUI extends UIElement {
     constructor() {
         super(document.createElement('img'));
@@ -220,6 +259,7 @@ class ButtonUI extends BoxUI {
         this.color = "black";
         this.hoverColor = "blue";
         const width = w + "px", height = h + "px";
+        this.modifyStyle.position = "relative";
         this.modifyStyle.width = width;
         this.modifyStyle.height = height;
         this.modifyStyle.cursor = "pointer";
@@ -230,13 +270,9 @@ class ButtonUI extends BoxUI {
         this.text.modifyStyle.height = height;
         this.text.modifyStyle.userSelect = "none";
         this.text.modifyStyle.textAlign = "center";
-        const centerSpan = document.createElement('span');
-        this.text.modifyElement.appendChild(centerSpan);
-        centerSpan.style.display = "inline-block";
-        centerSpan.style.verticalAlign = "middle";
-        centerSpan.style.lineHeight = "normal";
-        centerSpan.style.height = height;
-        centerSpan.textContent = text;
+        this.text.modifyStyle.position = "absolute";
+        this.text.modifyStyle.lineHeight = "0px";
+        this.text.modifyElement.textContent = text;
         this.onLeaveEvent = ButtonUI.setButtonEvents(this);
     }
     get modifyText() {
@@ -268,6 +304,47 @@ class ButtonUI extends BoxUI {
     }
     static setButtonEvents(btn) {
         return this.setEvents(btn, (style, color) => style.backgroundColor = color);
+    }
+}
+class LayoutUI extends UIElement {
+    constructor() {
+        super(document.createElement('div'));
+        this.uiList = [];
+        this.padding = "0px";
+        this.margin = "5px";
+        this.modifyElement.setAttribute('class', 'layout');
+    }
+    getUI(index) {
+        return this.uiList[index];
+    }
+    add(ui) {
+        this.uiList.push(ui);
+        ui.modifyStyle.padding = this.padding;
+        ui.modifyStyle.margin = this.margin;
+        this.modifyElement.appendChild(ui.modifyElement);
+    }
+    remove(index) {
+        const ui = this.uiList[index];
+        this.uiList.splice(index, 1);
+        UI.body.appendChild(ui.modifyElement);
+    }
+}
+class VerticalLayoutUI extends LayoutUI {
+    constructor() {
+        super();
+    }
+    add(ui) {
+        super.add(ui);
+        ui.modifyStyle.display = "block";
+    }
+}
+class HorizontalLayoutUI extends LayoutUI {
+    constructor() {
+        super();
+    }
+    add(ui) {
+        super.add(ui);
+        ui.modifyStyle.display = "inline-block";
     }
 }
 class ImageButtonUI extends ImageUI {
@@ -313,21 +390,55 @@ function getTextUI(textContent = "", border = 1, hexColor = "#000000") {
     text.modifyStyle.textShadow = `${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px, ${hexColor} 0px 0px ${border}px`;
     return text;
 }
-const EnumUtility = {
-    hasFlag: (value, check) => (value & check) === value
-};
-const FileUtility = {
-    getName: path => path.replace(/^.*[\\\/]/, '')
-};
-class PopUpInfo extends UIElement {
+var EnumUtility;
+(function (EnumUtility) {
+    function hasFlag(value, check) {
+        return (value & check) === value;
+    }
+    EnumUtility.hasFlag = hasFlag;
+})(EnumUtility || (EnumUtility = {}));
+var FileUtility;
+(function (FileUtility) {
+    function getName(path) {
+        return path.replace(/^.*[\\\/]/, '');
+    }
+    FileUtility.getName = getName;
+})(FileUtility || (FileUtility = {}));
+var MathUtility;
+(function (MathUtility) {
+    function clampElement(x, y, element) {
+        const w = element.clientWidth, h = element.clientHeight;
+        if ((x + w) > window.innerWidth)
+            x += window.innerWidth - (x + w);
+        if ((y + h) > window.innerHeight)
+            y += window.innerHeight - (y + h);
+        return { x, y };
+    }
+    MathUtility.clampElement = clampElement;
+})(MathUtility || (MathUtility = {}));
+const PointerUtility = new (class PointerUtility {
+    constructor() {
+        this.position = { x: 0, y: 0 };
+        this.moveEvents = [];
+        window.addEventListener('pointermove', e => {
+            this.position.x = e.clientX;
+            this.position.y = e.clientY;
+            for (let func of this.moveEvents)
+                func(this);
+        });
+    }
+    addOnMove(func) {
+        this.moveEvents.push(func);
+    }
+})();
+const popUpInfo = new (class PopUpInfo extends UIElement {
     constructor() {
         super(document.createElement('div'));
         this.width = 400;
-        this.readOnly = false;
+        this.readOnly = true;
         const width = this.width + "px";
         this.modifyStyle.backgroundColor = "black";
         this.modifyStyle.zIndex = "100";
-        this.modifyStyle.display = "none";
         this.modifyStyle.position = "fixed";
         this.modifyStyle.minWidth = width;
         this.modifyStyle.padding = "5px";
@@ -345,16 +456,20 @@ class PopUpInfo extends UIElement {
         this.nameText.modifyStyle.display = "inline-block";
         this.nameText.modifyStyle.position = "relative";
         this.nameText.modifyStyle.top = "-75px";
-        this.addInfoButton = new ButtonUI("Add", 100, 30);
-        this.modifyElement.appendChild(this.addInfoButton.modifyElement);
-        this.addInfoButton.setColor("#1f1f1f");
-        this.addInfoButton.setHoverColor("#404040");
-        this.addInfoButton.modifyStyle.opacity = "50%";
-        this.addInfoButton.modifyText.modifyStyle.color = "white";
-        this.addInfoButton.modifyText.modifyStyle.fontFamily = defaultValue.fontFamily;
-        this.addInfoButton.modifyStyle.position = "absolute";
-        this.addInfoButton.modifyStyle.top = "0px";
-        this.addInfoButton.modifyStyle.right = "0px";
+        const addDiv = document.createElement('div');
+        this.modifyElement.appendChild(addDiv);
+        addDiv.style.position = "absolute";
+        addDiv.style.display = "inline-line";
+        addDiv.style.top = "0px";
+        addDiv.style.right = "0px";
+        this.editInfoButton = new ButtonUI("Edit", 100, 30);
+        addDiv.appendChild(this.editInfoButton.modifyElement);
+        this.editInfoButton.setColor("rgba(0, 0, 0, 0.5)");
+        this.editInfoButton.setHoverColor("rgba(100, 100, 100, 1)");
+        this.editInfoButton.modifyText.modifyStyle.color = "white";
+        this.editInfoButton.modifyText.modifyStyle.fontFamily = defaultValue.fontFamily;
+        this.editInfoButton.modifyStyle.display = "inline-block";
+        this.editInfoButton.modifyEvents.addOnClick(() => championInfoEdit.show());
         this.descriptionText = new TextUI("");
         this.modifyElement.appendChild(this.descriptionText.modifyElement);
         this.descriptionText.modifyStyle.color = "white";
@@ -366,31 +481,7 @@ class PopUpInfo extends UIElement {
         this.descriptionText.modifyStyle.overflowY = "auto";
         this.descriptionText.modifyStyle.overflowX = "hidden";
         this.descriptionText.modifyStyle.wordWrap = "break-word";
-    }
-    addInfo(title, infos, color) {
-        const paragraph = document.createElement('p');
-        this.descriptionText.modifyElement.appendChild(paragraph);
-        for (let info of infos) {
-            const strongTitle = document.createElement('strong');
-            paragraph.appendChild(strongTitle);
-            strongTitle.textContent = title + info.champion.name;
-            strongTitle.style.color = color;
-            const img = document.createElement('img');
-            paragraph.appendChild(img);
-            img.style.width = "25px";
-            img.style.height = "25px";
-            img.src = info.champion.getImageSrcPath();
-            const descriptionParagraph = document.createElement('textarea');
-            paragraph.appendChild(descriptionParagraph);
-            descriptionParagraph.style.display = "block";
-            descriptionParagraph.textContent += info.description;
-            descriptionParagraph.style.width = (this.width - 50) + "px";
-            descriptionParagraph.style.height = "100px";
-            descriptionParagraph.readOnly = this.readOnly;
-            descriptionParagraph.addEventListener('input', () => {
-                info.description = descriptionParagraph.value;
-            });
-        }
+        this.hide();
     }
     display(ui) {
         clearChildren(this.descriptionText.modifyElement);
@@ -399,16 +490,23 @@ class PopUpInfo extends UIElement {
             this.image.modifyElement.src = getImagePath(champion.src);
             this.nameText.modifyElement.textContent = champion.name;
             this.image.modifyElement.alt = champion.name;
-            this.addInfo("Good against ", champion.goodAgainst, "#ff0000");
-            this.addInfo("Bad against ", champion.badAgainst, "#ff0000");
-            this.addInfo("Good with ", champion.goodWith, "#00ff00");
-            this.addInfo("Bad with ", champion.badWith, "#00ff00");
+            this.editInfoButton.modifyStyle.visibility = "visible";
+            championInfoEdit.champion = champion;
+            for (let info of champion.goodAgainst)
+                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getGoodAgainst(info, this.width, this.readOnly).modifyElement);
+            for (let info of champion.badAgainst)
+                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getBadAgainst(info, this.width, this.readOnly).modifyElement);
+            for (let info of champion.goodWith)
+                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getGoodWith(info, this.width, this.readOnly).modifyElement);
+            for (let info of champion.badWith)
+                this.descriptionText.modifyElement.appendChild(ChampionInfoUI.getBadWith(info, this.width, this.readOnly).modifyElement);
         }
         else {
             this.image.modifyElement.src = getImagePath(ui.src);
             this.image.modifyElement.alt = "No image.";
             this.nameText.modifyElement.textContent = "No champion selected!";
             this.descriptionText.modifyElement.textContent = "";
+            this.editInfoButton.modifyStyle.visibility = "hidden";
             clearChildren(this.descriptionText.modifyElement);
         }
         this.modifyStyle.display = "block";
@@ -416,7 +514,7 @@ class PopUpInfo extends UIElement {
     hide() {
         this.modifyStyle.display = "none";
     }
-}
+})();
 class ChampionSelectUI extends UIElement {
     constructor(src, w, h) {
         super(document.createElement('div'));
@@ -433,15 +531,10 @@ class ChampionSelectUI extends UIElement {
         this.imageButton.modifyEvents.addOnPointerDown(e => {
             if (e.button !== 2)
                 return;
-            ChampionSelectUI.popUp.display(this);
-            let x = e.clientX, y = e.clientY;
-            const w = ChampionSelectUI.popUp.modifyElement.clientWidth, h = ChampionSelectUI.popUp.modifyElement.clientHeight;
-            if ((x + w) > window.innerWidth)
-                x += window.innerWidth - (x + w);
-            if ((y + h) > window.innerHeight)
-                y += window.innerHeight - (y + h);
-            ChampionSelectUI.popUp.modifyStyle.left = x + "px";
-            ChampionSelectUI.popUp.modifyStyle.top = y + "px";
+            popUpInfo.display(this);
+            const pos = MathUtility.clampElement(e.clientX - 5, e.clientY - 5, popUpInfo.modifyElement);
+            popUpInfo.modifyStyle.left = pos.x + "px";
+            popUpInfo.modifyStyle.top = pos.y + "px";
         });
         this.text = getTextUI();
         this.modifyElement.appendChild(this.text.modifyElement);
@@ -486,9 +579,13 @@ class ChampionSelectUI extends UIElement {
         this.hoverImage.modifyStyle.left = "0px";
         this.imageButton.modifyEvents.addOnPointerEnter(() => {
             this.hoverImage.modifyStyle.visibility = "visible";
+            if (this.champion === null)
+                return;
+            miniPopUpInfo.display(this.champion);
         });
         this.imageButton.modifyEvents.addOnPointerLeave(() => {
             this.hoverImage.modifyStyle.visibility = "hidden";
+            miniPopUpInfo.hide();
         });
         this.imageButton.modifyStyle.width = width;
         this.imageButton.modifyStyle.height = height;
@@ -497,10 +594,6 @@ class ChampionSelectUI extends UIElement {
     }
     getChampion() {
         return this.champion;
-    }
-    reset() {
-        this.synergyText.modifyElement.textContent = "";
-        this.counterText.modifyElement.textContent = "";
     }
     getSynergyScore() {
         if (this.synergyScore === null)
@@ -555,7 +648,6 @@ class ChampionSelectUI extends UIElement {
         this.counterText.modifyElement.textContent = this.counterScore.score.toString();
     }
 }
-ChampionSelectUI.popUp = new PopUpInfo();
 class ChampionSelectSetUI extends ChampionSelectUI {
     constructor() {
         super(...arguments);
@@ -591,95 +683,10 @@ class ChampionSelectSetUI extends ChampionSelectUI {
         this.imageButton.modifyElement.src = getImagePath(this.src);
         this.imageButton.modifyElement.alt = "No champion.";
         this.text.modifyElement.textContent = "";
+        this.synergyText.modifyElement.textContent = "";
+        this.counterText.modifyElement.textContent = "";
         this.triggerOnSet(oldValue);
         return false;
-    }
-}
-class ChampionUI extends ChampionSelectSetUI {
-    constructor(src, w, h) {
-        super(src, w, h);
-        this.blueSideSelectedImage = ChampionUI.getSideSelectedImage("BlueFadeOut.png", w, h);
-        this.modifyElement.appendChild(this.blueSideSelectedImage.modifyElement);
-        this.redSideSelectedImage = ChampionUI.getSideSelectedImage("RedFadeOut.png", w, h);
-        this.modifyElement.appendChild(this.redSideSelectedImage.modifyElement);
-    }
-    static getSideSelectedImage(src, w, h) {
-        const sideImage = new ImageUI();
-        sideImage.modifyElement.src = getImagePath(src);
-        sideImage.modifyStyle.width = w + "px";
-        sideImage.modifyStyle.height = h + "px";
-        sideImage.modifyStyle.transform = "rotate(270deg)";
-        sideImage.modifyStyle.position = "absolute";
-        sideImage.modifyStyle.visibility = "hidden";
-        sideImage.modifyStyle.opacity = "75%";
-        sideImage.modifyStyle.pointerEvents = "none";
-        return sideImage;
-    }
-    getChampionValue() {
-        return this.value;
-    }
-    reset() {
-        super.reset();
-        this.value.available = true;
-        this.imageButton.modifyStyle.filter = "grayscale(0%)";
-        this.blueSideSelectedImage.modifyStyle.visibility = "hidden";
-        this.redSideSelectedImage.modifyStyle.visibility = "hidden";
-    }
-    ban() {
-        this.value.available = false;
-        this.imageButton.modifyStyle.filter = "grayscale(100%)";
-    }
-    pick() {
-        this.value.available = false;
-    }
-    bluePick() {
-        this.pick();
-        this.blueSideSelectedImage.modifyStyle.visibility = "visible";
-    }
-    redPick() {
-        this.pick();
-        this.redSideSelectedImage.modifyStyle.visibility = "visible";
-    }
-}
-class LayoutUI extends UIElement {
-    constructor() {
-        super(document.createElement('div'));
-        this.uiList = [];
-        this.padding = "0px";
-        this.margin = "5px";
-        this.modifyElement.setAttribute('class', 'layout');
-    }
-    getUI(index) {
-        return this.uiList[index];
-    }
-    add(ui) {
-        this.uiList.push(ui);
-        ui.modifyStyle.padding = this.padding;
-        ui.modifyStyle.margin = this.margin;
-        this.modifyElement.appendChild(ui.modifyElement);
-    }
-    remove(index) {
-        const ui = this.uiList[index];
-        this.uiList.splice(index, 1);
-        UI.body.appendChild(ui.modifyElement);
-    }
-}
-class VerticalLayoutUI extends LayoutUI {
-    constructor() {
-        super();
-    }
-    add(ui) {
-        super.add(ui);
-        ui.modifyStyle.display = "block";
-    }
-}
-class HorizontalLayoutUI extends LayoutUI {
-    constructor() {
-        super();
-    }
-    add(ui) {
-        super.add(ui);
-        ui.modifyStyle.display = "inline-block";
     }
 }
 class SideUI extends ChampionSelectSetUI {
@@ -694,9 +701,10 @@ class SideUI extends ChampionSelectSetUI {
         return (champ !== null && champ.available) ? champ : null;
     }
     reset() {
-        super.reset();
         this.set(null);
         this.imageButton.modifyElement.src = getImagePath(this.src);
+        this.synergyText.modifyElement.textContent = "";
+        this.counterText.modifyElement.textContent = "";
     }
 }
 class SideLayoutUI extends VerticalLayoutUI {
@@ -748,9 +756,8 @@ class SideLayoutUI extends VerticalLayoutUI {
                 evaluateBans(ui.side, Side.blue);
         });
         ui.addOnSet((source, champ, oldChamp) => {
-            if (champ === null)
-                return;
-            champ.ban();
+            if (champ !== null)
+                champ.ban();
             evaluateBans(this, this.enemySide);
         });
         return ui;
@@ -775,12 +782,12 @@ class SideLayoutUI extends VerticalLayoutUI {
                 evaluatePicks(ui.side, Side.blue);
         });
         ui.addOnSet((source, champ, oldChamp) => {
-            if (champ === null)
-                return;
-            if (this === Side.blue)
-                champ.bluePick();
-            else
-                champ.redPick();
+            if (champ !== null) {
+                if (this === Side.blue)
+                    champ.bluePick();
+                else
+                    champ.redPick();
+            }
             evaluatePicks(this, this.enemySide);
         });
         return ui;
@@ -790,7 +797,7 @@ class SideLayoutUI extends VerticalLayoutUI {
             oldValue.reset();
     }
     static pickableUI(ui) {
-        ui.addOnSet(SideLayoutUI.resetOldChampEvent);
+        ui.addOnSet(this.resetOldChampEvent);
         ui.imageButton.modifyEvents.addOnClick(() => {
             pick.setEvent = null;
             pick.setChampionEvent = null;
@@ -815,6 +822,30 @@ const ChampionData = {
                 champ.addGoodWith(Champion.get(gw.name), gw.details, gw.score);
             }
         }
+    },
+    save: () => {
+        function loadData(info) {
+            return {
+                name: info.champion.name,
+                title: info.title,
+                details: info.description,
+                score: info.score
+            };
+        }
+        const data = [];
+        for (let champion of Champion.ALL) {
+            const d = {
+                name: champion.name,
+                goodWith: [],
+                goodAgainst: []
+            };
+            for (let info of champion.goodAgainst)
+                d.goodAgainst.push(loadData(info));
+            for (let info of champion.goodWith)
+                d.goodWith.push(loadData(info));
+            data.push(d);
+        }
+        return data;
     }
 };
 const ChampionFilter = {
@@ -890,6 +921,265 @@ const pick = new (class Pick {
             this.setChampionEvent(ui);
     }
 })();
+const championInfoEdit = new (class ChampionInfoEdit extends UIElement {
+    constructor() {
+        super(document.createElement('div'));
+        this.champion = null;
+        this.modifyStyle.zIndex = "110";
+        this.modifyStyle.position = "fixed";
+        this.modifyStyle.left = "0px";
+        this.modifyStyle.top = "0px";
+        this.modifyStyle.width = "100%";
+        this.modifyStyle.height = "100%";
+        this.backgroundDiv = document.createElement('div');
+        this.modifyElement.appendChild(this.backgroundDiv);
+        this.backgroundDiv.style.backgroundColor = "black";
+        this.backgroundDiv.style.opacity = "50%";
+        this.backgroundDiv.style.width = "100%";
+        this.backgroundDiv.style.height = "100%";
+        this.backgroundDiv.style.position = "fixed";
+        this.championImageUI = new ImageUI();
+        this.modifyElement.appendChild(this.championImageUI.modifyElement);
+        this.championImageUI.modifyStyle.position = "relative";
+        this.championImageUI.modifyStyle.width = "100px";
+        this.championImageUI.modifyStyle.height = "100px";
+        this.championNameTextUI = new TextUI("");
+        this.modifyElement.appendChild(this.championNameTextUI.modifyElement);
+        this.championNameTextUI.modifyStyle.position = "relative";
+        this.championNameTextUI.modifyStyle.fontFamily = defaultValue.fontFamily;
+        this.championNameTextUI.modifyStyle.color = "#ffffff";
+        this.championNameTextUI.modifyStyle.display = "inline-block";
+        this.championNameTextUI.modifyStyle.verticalAlign = "top";
+        this.infoSelectUI = new SelectUI();
+        this.modifyElement.appendChild(this.infoSelectUI.modifyElement);
+        this.infoSelectUI.modifyStyle.position = "relative";
+        this.infoSelectUI.modifyStyle.verticalAlign = "top";
+        this.infoSelectUI.addOption("Good Against");
+        this.infoSelectUI.addOption("Good With");
+        this.championSelectUI = new SelectUI();
+        this.modifyElement.appendChild(this.championSelectUI.modifyElement);
+        this.championSelectUI.modifyStyle.position = "relative";
+        this.championSelectUI.modifyStyle.verticalAlign = "top";
+        const addBtn = new ButtonUI("Add", 50, 30);
+        this.modifyElement.appendChild(addBtn.modifyElement);
+        addBtn.setColor("rgb(0, 0, 0)");
+        addBtn.setHoverColor("rgb(100, 100, 100)");
+        addBtn.modifyText.modifyStyle.color = "white";
+        addBtn.modifyStyle.position = "relative";
+        addBtn.modifyStyle.display = "inline-block";
+        addBtn.modifyStyle.verticalAlign = "top";
+        addBtn.modifyText.modifyStyle.fontFamily = defaultValue.fontFamily;
+        addBtn.modifyEvents.addOnClick(() => {
+            this.addInfo();
+        });
+        this.detailsDiv = document.createElement('div');
+        this.modifyElement.appendChild(this.detailsDiv);
+        this.goodAgainstDiv = this.getDiv();
+        this.goodWithDiv = this.getDiv();
+        const closeBtn = new ButtonUI("X", 50, 50);
+        this.modifyElement.appendChild(closeBtn.modifyElement);
+        closeBtn.setColor("black");
+        closeBtn.setHoverColor("red");
+        closeBtn.modifyStyle.position = "absolute";
+        closeBtn.modifyStyle.right = "0px";
+        closeBtn.modifyStyle.top = "0px";
+        closeBtn.modifyText.modifyStyle.color = "white";
+        closeBtn.modifyText.modifyStyle.fontFamily = defaultValue.fontFamily;
+        closeBtn.modifyText.modifyStyle.fontSize = "28px";
+        closeBtn.modifyEvents.addOnClick(() => this.hide());
+        this.hide();
+    }
+    getDiv() {
+        const div = document.createElement('div');
+        this.detailsDiv.appendChild(div);
+        div.style.overflowY = "auto";
+        div.style.display = "inline-block";
+        div.style.padding = "10px";
+        div.style.position = "relative";
+        div.style.height = "400px";
+        return div;
+    }
+    show() {
+        this.championNameTextUI.modifyElement.textContent = this.champion.name;
+        this.championImageUI.modifyElement.src = this.champion.getImageSrcPath();
+        clearChildren(this.goodAgainstDiv);
+        clearChildren(this.goodWithDiv);
+        for (let info of this.champion.goodAgainst) {
+            this.goodAgainstDiv.appendChild(this.getGoodAgainst(info).modifyElement);
+        }
+        for (let info of this.champion.goodWith) {
+            this.goodWithDiv.appendChild(this.getGoodWith(info).modifyElement);
+        }
+        this.modifyStyle.display = "block";
+    }
+    getGoodAgainst(info) {
+        return ChampionInfoUI.getGoodAgainst(info, 400, false);
+    }
+    getGoodWith(info) {
+        return ChampionInfoUI.getGoodWith(info, 400, false);
+    }
+    hide() {
+        this.modifyStyle.display = "none";
+    }
+    addInfo(details = "One does not simply write a detailed summary.", score = 1) {
+        const champion = Champion.get(this.championSelectUI.modifyElement.options[this.championSelectUI.modifyElement.selectedIndex].text);
+        switch (this.infoSelectUI.modifyElement.selectedIndex) {
+            case 0:
+                if (this.champion.addGoodAgainst(champion, details, score))
+                    this.goodAgainstDiv.appendChild(this.getGoodAgainst(this.champion.goodAgainst[this.champion.goodAgainst.length - 1]).modifyElement);
+                break;
+            default:
+                if (this.champion.addGoodWith(champion, details, score))
+                    this.goodWithDiv.appendChild(this.getGoodWith(this.champion.goodWith[this.champion.goodWith.length - 1]).modifyElement);
+                break;
+        }
+    }
+})();
+class ChampionInfoUI extends UIElement {
+    constructor(info, title, color, w, readOnly) {
+        super(ChampionInfo.load(info, title, color, w, readOnly));
+    }
+    static getGoodAgainst(info, w, readOnly) {
+        return new ChampionInfoUI(info, "Good Against ", "#ffffff", w, readOnly);
+    }
+    static getGoodWith(info, w, readOnly) {
+        return new ChampionInfoUI(info, "Good With ", "#ffffff", w, readOnly);
+    }
+    static getBadAgainst(info, w, readOnly) {
+        return new ChampionInfoUI(info, "Bad Against ", "#ffffff", w, readOnly);
+    }
+    static getBadWith(info, w, readOnly) {
+        return new ChampionInfoUI(info, "Bad With ", "#ffffff", w, readOnly);
+    }
+}
+class ChampionScore {
+    constructor() {
+        this.champions = [];
+        this.score = 0;
+    }
+}
+class ChampionUI extends ChampionSelectSetUI {
+    constructor(src, w, h) {
+        super(src, w, h);
+        this.blueSideSelectedImage = ChampionUI.getSideSelectedImage("BlueFadeOut.png", w, h);
+        this.modifyElement.appendChild(this.blueSideSelectedImage.modifyElement);
+        this.redSideSelectedImage = ChampionUI.getSideSelectedImage("RedFadeOut.png", w, h);
+        this.modifyElement.appendChild(this.redSideSelectedImage.modifyElement);
+    }
+    static getSideSelectedImage(src, w, h) {
+        const sideImage = new ImageUI();
+        sideImage.modifyElement.src = getImagePath(src);
+        sideImage.modifyStyle.width = w + "px";
+        sideImage.modifyStyle.height = h + "px";
+        sideImage.modifyStyle.transform = "rotate(270deg)";
+        sideImage.modifyStyle.position = "absolute";
+        sideImage.modifyStyle.visibility = "hidden";
+        sideImage.modifyStyle.opacity = "75%";
+        sideImage.modifyStyle.pointerEvents = "none";
+        return sideImage;
+    }
+    getChampionValue() {
+        return this.value;
+    }
+    reset() {
+        this.value.available = true;
+        this.imageButton.modifyStyle.filter = "grayscale(0%)";
+        this.blueSideSelectedImage.modifyStyle.visibility = "hidden";
+        this.redSideSelectedImage.modifyStyle.visibility = "hidden";
+    }
+    ban() {
+        this.value.available = false;
+        this.imageButton.modifyStyle.filter = "grayscale(100%)";
+    }
+    pick() {
+        this.value.available = false;
+    }
+    bluePick() {
+        this.pick();
+        this.blueSideSelectedImage.modifyStyle.visibility = "visible";
+    }
+    redPick() {
+        this.pick();
+        this.redSideSelectedImage.modifyStyle.visibility = "visible";
+    }
+}
+const miniPopUpInfo = new (class MiniPopUpInfo extends UIElement {
+    constructor() {
+        super(document.createElement('div'));
+        this.modifyStyle.position = "fixed";
+        this.modifyStyle.backgroundColor = "black";
+        this.modifyStyle.zIndex = "99";
+        this.modifyStyle.pointerEvents = "none";
+        this.modifyEvents.addOnPointerLeave(() => this.hide());
+        this.goodAgainstDiv = this.getBackground("BlueFadeOut.png", "GA");
+        this.goodWithDiv = this.getBackground("BlueFadeOut.png", "GW");
+        this.badAgainstDiv = this.getBackground("RedFadeOut.png", "BA");
+        PointerUtility.addOnMove(source => {
+            const pos = MathUtility.clampElement(source.position.x + 10, source.position.y + 10, this.modifyElement);
+            this.modifyStyle.left = pos.x + "px";
+            this.modifyStyle.top = pos.y + "px";
+        });
+        this.hide();
+    }
+    getBackground(imgName, title) {
+        const holderDiv = document.createElement('div');
+        this.modifyElement.appendChild(holderDiv);
+        holderDiv.style.display = "block";
+        holderDiv.style.backgroundImage = `url(${getImagePath(imgName)})`;
+        holderDiv.style.backgroundRepeat = "no-repeat";
+        holderDiv.style.backgroundSize = "100% 100%";
+        holderDiv.style.padding = "0px";
+        holderDiv.style.margin = "0px";
+        holderDiv.style.whiteSpace = "nowrap";
+        const dummyDiv = document.createElement('div');
+        holderDiv.appendChild(dummyDiv);
+        dummyDiv.style.height = "50px";
+        dummyDiv.style.width = "50px";
+        dummyDiv.style.padding = "0px";
+        dummyDiv.style.margin = "0px";
+        dummyDiv.style.display = "inline-block";
+        dummyDiv.style.position = "relative";
+        const textUI = getTextUI(title);
+        dummyDiv.appendChild(textUI.modifyElement);
+        textUI.modifyStyle.width = "100%";
+        textUI.modifyStyle.height = "100%";
+        textUI.modifyStyle.position = "absolute";
+        textUI.modifyStyle.textAlign = "center";
+        const div = document.createElement('div');
+        holderDiv.appendChild(div);
+        div.style.height = "50px";
+        div.style.minWidth = "50px";
+        div.style.display = "inline-block";
+        div.style.padding = "0px";
+        div.style.margin = "0px";
+        return div;
+    }
+    static getImage(champion) {
+        const img = new ImageUI();
+        img.modifyElement.src = champion.getImageSrcPath();
+        img.modifyStyle.width = "50px";
+        img.modifyStyle.height = "50px";
+        return img;
+    }
+    static loadImages(holder, infos) {
+        for (let info of infos) {
+            const img = this.getImage(info.champion);
+            holder.appendChild(img.modifyElement);
+        }
+    }
+    display(champion) {
+        clearChildren(this.goodAgainstDiv);
+        clearChildren(this.goodWithDiv);
+        clearChildren(this.badAgainstDiv);
+        MiniPopUpInfo.loadImages(this.goodAgainstDiv, champion.goodAgainst);
+        MiniPopUpInfo.loadImages(this.goodWithDiv, champion.goodWith);
+        MiniPopUpInfo.loadImages(this.badAgainstDiv, champion.badAgainst);
+        this.modifyStyle.display = "block";
+    }
+    hide() {
+        this.modifyStyle.display = "none";
+    }
+})();
 class GridLayoutUI extends LayoutUI {
     constructor() {
         super();
@@ -940,6 +1230,7 @@ headerText.modifyStyle.fontSize = "32px";
 headerText.modifyStyle.margin = "0px";
 headerText.modifyStyle.cursor = "default";
 (() => {
+    document.body.style.overflowX = "auto";
     UI.body.style.overflowY = "auto";
     UI.body.style.minWidth = "884px";
     UI.body.oncontextmenu = () => false;
@@ -1207,6 +1498,7 @@ headerText.modifyStyle.cursor = "default";
         ui.set(champion);
         ui.imageButton.modifyEvents.addOnClick(() => pick.setChampion(ui));
         grid.add(ui);
+        championInfoEdit.championSelectUI.addOption(name);
     }
     const visibleData = {
         name: "",
@@ -1429,6 +1721,44 @@ headerText.modifyStyle.cursor = "default";
         const resetBtn = getTextUI("Reset");
         resetBtn.modifyStyle.width = "100px";
         resetBtn.modifyEvents.addOnClick(() => reset());
+        const downloadDiv = document.createElement('div');
+        UI.body.appendChild(downloadDiv);
+        const downloadDataBtn = new ButtonUI("Save As", 100, 30);
+        downloadDiv.appendChild(downloadDataBtn.modifyElement);
+        downloadDataBtn.setColor("rgb(0, 0, 0)");
+        downloadDataBtn.setHoverColor("rgb(100, 100, 100)");
+        downloadDataBtn.modifyText.modifyStyle.color = "white";
+        downloadDataBtn.modifyStyle.display = "inline-block";
+        const downloadDataInputField = new InputFieldUI();
+        downloadDiv.appendChild(downloadDataInputField.modifyElement);
+        downloadDataInputField.modifyStyle.position = "relative";
+        downloadDataInputField.modifyStyle.top = "-10px";
+        downloadDataBtn.modifyEvents.addOnClick(() => {
+            const refDownload = document.createElement('a');
+            refDownload.href = "data:text/json;charset=uft-8," + encodeURIComponent(JSON.stringify(ChampionData.save()));
+            let fileName = downloadDataInputField.modifyElement.value;
+            if (fileName === "")
+                fileName = "Untitled";
+            refDownload.download = fileName + ".json";
+            refDownload.click();
+        });
+        const loadDataTextUI = getTextUI("Load Data: ");
+        UI.body.appendChild(loadDataTextUI.modifyElement);
+        const loadDataInput = new InputFieldUI();
+        loadDataTextUI.modifyElement.appendChild(loadDataInput.modifyElement);
+        loadDataInput.modifyElement.type = "file";
+        loadDataInput.modifyElement.accept = ".json";
+        loadDataInput.modifyEvents.addOnChange(() => {
+            const files = loadDataInput.modifyElement.files;
+            for (let i = 0, count = files.length; i < count; i++) {
+                const file = files[i];
+                const b = file.slice();
+                b.text().then(e => {
+                    ChampionData.clear();
+                    ChampionData.load(JSON.parse(e));
+                });
+            }
+        });
     })();
 })();
 (() => {
@@ -1440,6 +1770,10 @@ headerText.modifyStyle.cursor = "default";
     aatrox.addGoodAgainst(gangplank, toDoDescription);
     aatrox.addGoodAgainst(darius, toDoDescription);
     aatrox.addGoodAgainst(galio, toDoDescription);
+    aatrox.addGoodAgainst(viktor, toDoDescription);
+    aatrox.addGoodAgainst(azir, toDoDescription);
+    aatrox.addGoodAgainst(malphite, toDoDescription);
+    aatrox.addGoodAgainst(malzahar, toDoDescription);
     aatrox.addGoodWith(gnar, toDoDescription);
     aatrox.addGoodWith(yasuo, toDoDescription);
     aatrox.addGoodWith(azir, toDoDescription);
