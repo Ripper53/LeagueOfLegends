@@ -1,13 +1,16 @@
 class ChampionInfo {
-    constructor(champion, targetChampion, title, description, score) {
-        this.champion = champion;
-        this.targetChampion = targetChampion;
+    constructor(championList, targetChampionList, title, description, score) {
+        this.championList = championList;
+        this.targetChampionList = targetChampionList;
         this.title = title;
         this.description = description;
         this.score = score;
     }
+    get targetChampion() {
+        return this.targetChampionList.champion;
+    }
     getChampion(champion) {
-        return this.champion !== champion ? this.champion : this.targetChampion;
+        return this.championList.champion !== champion ? this.championList.champion : this.targetChampion;
     }
     static loadDetails(details, w) {
         const descriptionParagraph = document.createElement('textarea');
@@ -39,14 +42,15 @@ class ChampionInfo {
         descriptionParagraph.readOnly = true;
         return pInfo;
     }
-    static loadEditable(champion, info, title, color, w, infos, parent) {
-        const pInfo = this.loadTitle(champion, info, title, color);
+    static loadEditable(info, title, color, w, infos, parent) {
+        const pInfo = this.loadTitle(infos.champion, info, title, color);
         const deleteBtn = ButtonUtility.getCloseButton(25, 25);
         pInfo.appendChild(deleteBtn.modifyElement);
         deleteBtn.modifyStyle.display = "inline-block";
         deleteBtn.modifyStyle.float = "right";
         deleteBtn.modifyEvents.addOnClick(() => {
             infos.remove(info.targetChampion);
+            info.championList.remove(infos.champion);
             parent.removeChild(pInfo);
         });
         const descriptionParagraph = this.loadDetails(info.description, w);
@@ -859,6 +863,8 @@ const ChampionData = {
             const champ = Champion.get(d.name);
             if (d.role)
                 champ.role = d.role;
+            if (d.civilization)
+                champ.civilization = d.civilization;
             if (d.mode)
                 champ.mode = d.mode;
             if (d.goodAgainst) {
@@ -887,6 +893,7 @@ const ChampionData = {
             const d = {
                 name: champion.name,
                 role: champion.role,
+                civilization: champion.civilization,
                 mode: champion.mode
             };
             let hasData = false;
@@ -1072,10 +1079,10 @@ const championInfoEdit = new (class ChampionInfoEdit extends UIElement {
         this.modifyStyle.display = "block";
     }
     getGoodAgainst(info, infos) {
-        return EditableChampionInfoUI.getGoodAgainst(this.champion, info, 400, infos, this.goodAgainstDiv);
+        return EditableChampionInfoUI.getGoodAgainst(info, 400, infos, this.goodAgainstDiv);
     }
     getGoodWith(info, infos) {
-        return EditableChampionInfoUI.getGoodWith(this.champion, info, 400, infos, this.goodWithDiv);
+        return EditableChampionInfoUI.getGoodWith(info, 400, infos, this.goodWithDiv);
     }
     addInfo(details = "One does not simply write a detailed summary.", score = 1) {
         const champion = Champion.get(this.championSelectUI.modifyElement.options[this.championSelectUI.modifyElement.selectedIndex].text);
@@ -1136,7 +1143,7 @@ class ChampionInfoList {
 }
 class GoodAgainstChampionInfoList extends ChampionInfoList {
     add(targetChampion, title, details, score) {
-        const info = new ChampionInfo(this.champion, targetChampion, title, details, score);
+        const info = new ChampionInfo(this, targetChampion.badAgainst, title, details, score);
         return this.addChampionInfo(info, targetChampion.badAgainst);
     }
     remove(targetChampion) {
@@ -1145,7 +1152,7 @@ class GoodAgainstChampionInfoList extends ChampionInfoList {
 }
 class GoodWithChampionInfoList extends ChampionInfoList {
     add(targetChampion, title, details, score) {
-        const info = new ChampionInfo(this.champion, targetChampion, title, details, score);
+        const info = new ChampionInfo(this, targetChampion.goodWith, title, details, score);
         return this.addChampionInfo(info, targetChampion.goodWith);
     }
     remove(targetChampion) {
@@ -1154,7 +1161,7 @@ class GoodWithChampionInfoList extends ChampionInfoList {
 }
 class BadAgainstChampionInfoList extends ChampionInfoList {
     add(targetChampion, title, details, score) {
-        const info = new ChampionInfo(this.champion, targetChampion, title, details, score);
+        const info = new ChampionInfo(this, targetChampion.goodAgainst, title, details, score);
         return this.addChampionInfo(info, targetChampion.goodAgainst);
     }
     remove(targetChampion) {
@@ -1179,20 +1186,20 @@ class ReadOnlyChampionInfoUI extends UIElement {
     }
 }
 class EditableChampionInfoUI extends UIElement {
-    constructor(champion, info, title, color, w, infos, parent) {
-        super(ChampionInfo.loadEditable(champion, info, title, color, w, infos, parent));
+    constructor(info, title, color, w, infos, parent) {
+        super(ChampionInfo.loadEditable(info, title, color, w, infos, parent));
     }
-    static getGoodAgainst(champion, info, w, infos, parent) {
-        return new EditableChampionInfoUI(champion, info, "Good Against ", "#ffffff", w, infos, parent);
+    static getGoodAgainst(info, w, infos, parent) {
+        return new EditableChampionInfoUI(info, "Good Against ", "#ffffff", w, infos, parent);
     }
-    static getGoodWith(champion, info, w, infos, parent) {
-        return new EditableChampionInfoUI(champion, info, "Good With ", "#ffffff", w, infos, parent);
+    static getGoodWith(info, w, infos, parent) {
+        return new EditableChampionInfoUI(info, "Good With ", "#ffffff", w, infos, parent);
     }
-    static getBadAgainst(champion, info, w, infos, parent) {
-        return new EditableChampionInfoUI(champion, info, "Bad Against ", "#ffffff", w, infos, parent);
+    static getBadAgainst(info, w, infos, parent) {
+        return new EditableChampionInfoUI(info, "Bad Against ", "#ffffff", w, infos, parent);
     }
-    static getBadWith(champion, info, w, infos, parent) {
-        return new EditableChampionInfoUI(champion, info, "Bad With ", "#ffffff", w, infos, parent);
+    static getBadWith(info, w, infos, parent) {
+        return new EditableChampionInfoUI(info, "Bad With ", "#ffffff", w, infos, parent);
     }
 }
 class ChampionScore {
